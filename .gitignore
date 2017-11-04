@@ -1,3 +1,8 @@
+# Eclipse IDE specific
+.settings/
+*.pydevproject
+*.project
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

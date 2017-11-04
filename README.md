@@ -7,7 +7,7 @@ This repositoriy implements the foundation of the different free.dm nodes and th
 free.dm nodes will play different roles in their network but will share the same communication foundation on top of which specific functionality is implemented. This repository hosts the Python based modules for setting up a basic node role.
 
 ### Current state
-The current this is more of a playground for testing different architectual approaches and communication frameworks. underconsideration are:
+The current this is more of a playground for testing different architectual approaches and communication frameworks. Under consideration are:
 
 * [RPyC](https://rpyc.readthedocs.io/en/latest/)
 * [Raet](https://github.com/RaetProtocol/raet)

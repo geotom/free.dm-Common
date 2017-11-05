@@ -1,6 +1,6 @@
 '''
 A class representing the server role of the communication system between free.dm nodes.
-@author: tommi
+@author: Thomas Wanderer
 '''
 
 # Imports

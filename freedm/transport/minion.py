@@ -1,6 +1,6 @@
 '''
 A class representing the minion role of the communication system between free.dm nodes.
-@author: tommi
+@author: Thomas Wanderer
 '''
 
 # Imports

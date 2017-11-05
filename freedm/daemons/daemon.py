@@ -1,5 +1,5 @@
 '''
-The generic daemon class for all free.dm server instances
+The generic daemon class for all free.dm daemons
 @author: Thomas Wanderer
 '''
 

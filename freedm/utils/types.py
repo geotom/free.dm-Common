@@ -5,7 +5,7 @@ blocks and catch type non-conformity in except blocks. But for cases where
 prior type checking is the better approach, this utility class provides a set of
 type checking methods.
 
-@author: tommi
+@author: Thomas Wanderer
 '''
 
 class TypeChecker(object):

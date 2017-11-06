@@ -15,7 +15,12 @@ from pathlib import Path
 path = Path(__file__)
 
 # Add import path
-sys.path.append(path.parents[2])
+sys.path.append(path.parents[1])
+sys.path.append('/home/tommi/Projekte/Privat/free.dm/Project/free.dm-Common/freedm')
+for p in sys.path:
+    print(p)
+
+from freedm.utils import logger
 
 # Run tests
 def run():

@@ -11,6 +11,7 @@ import sys
 # free.dm Imports
 from freedm.utils.types import TypeChecker as checker
 
+
 # Setup logger
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)

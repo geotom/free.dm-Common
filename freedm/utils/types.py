@@ -8,10 +8,13 @@ type checking methods.
 @author: Thomas Wanderer
 '''
 
+# Imports
+from typing import Any
+
 class TypeChecker(object):
     
     @staticmethod
-    def isInteger(obj):
+    def isInteger(obj: Any) -> bool:
         '''
         Checks if a number is an integer or if 
         a string represents an integer
@@ -24,7 +27,7 @@ class TypeChecker(object):
             return isinstance(obj, int)
     
     @staticmethod
-    def isFloat(obj):
+    def isFloat(obj: Any) -> bool:
         '''
         Checks if a number is a float
         or a string represents a float
@@ -44,7 +47,7 @@ class TypeChecker(object):
             return isinstance(obj, float)
     
     @staticmethod
-    def isBoolean(obj):
+    def isBoolean(obj: Any) -> bool:
         '''
         Checks if an object is a boolean
         :param object obj: Any object
@@ -53,7 +56,7 @@ class TypeChecker(object):
         return type(obj) == bool
     
     @staticmethod
-    def isNumerical(cls, obj):
+    def isNumerical(cls, obj: Any) -> bool:
         '''
         Checks if a string represents a number (a float or integer)
         :param object obj: Any object
@@ -70,7 +73,7 @@ class TypeChecker(object):
             return False
     
     @staticmethod
-    def isDigit(obj):
+    def isDigit(obj: Any) -> bool:
         '''
         Checks if a string represents only digits (e.g. "12345")
         :param object obj: Any object
@@ -82,7 +85,7 @@ class TypeChecker(object):
             return False
     
     @staticmethod  
-    def isString(obj):
+    def isString(obj: Any) -> bool:
         '''
         Checks if the object is a string
         :param object obj: Any object
@@ -91,7 +94,7 @@ class TypeChecker(object):
         return isinstance(obj, str)
     
     @staticmethod  
-    def isTuple(obj):
+    def isTuple(obj: Any) -> bool:
         '''
         Checks if the object is a tuple
         :param object obj: Any object
@@ -100,7 +103,7 @@ class TypeChecker(object):
         return isinstance(obj, tuple)
     
     @staticmethod  
-    def isList(obj):
+    def isList(obj: Any) -> bool:
         '''
         Checks if the object is a list
         :param object obj: Any object
@@ -109,7 +112,7 @@ class TypeChecker(object):
         return isinstance(obj, list)
     
     @staticmethod  
-    def isDict(obj):
+    def isDict(obj: Any) -> bool:
         '''
         Checks if the object is a dictionary
         :param object obj: Any object
@@ -118,7 +121,7 @@ class TypeChecker(object):
         return isinstance(obj, dict)
 
     @staticmethod  
-    def isFunction(obj):
+    def isFunction(obj: Any) -> bool:
         '''
         Checks if the object is a function
         :param object obj: Any object
@@ -127,7 +130,7 @@ class TypeChecker(object):
         return hasattr(obj, '__call__')
     
     @staticmethod  
-    def isAlpha(string):
+    def isAlpha(string: str) -> bool:
         '''
         Checks if a string contains only alphabetical characters
         :param str string: A string
@@ -139,7 +142,7 @@ class TypeChecker(object):
             return False
     
     @staticmethod  
-    def getExactType(obj):
+    def getExactType(obj: Any) -> str:
         '''
         Returns the object's type together with full module path
         :param object obj: Any object
@@ -155,7 +158,7 @@ class TypeChecker(object):
                 return None
 
     @classmethod  
-    def isExactType(cls, obj, obj_type):
+    def isExactType(cls, obj: Any, obj_type: str) -> bool:
         '''
         Checks if the object is of a specific type name
         :param object obj: Any object
@@ -168,7 +171,7 @@ class TypeChecker(object):
             return False
         
     @staticmethod
-    def isIterable(obj):
+    def isIterable(obj: Any) -> bool:
         '''
         Checks if the object is iterable
         :param obj: Any object

@@ -6,6 +6,14 @@ This module provides filesystem related utility methods
 # Imports
 import os
 import time
+from typing import Type, List, Union
+from contextlib import contextmanager
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEvent, FileSystemEventHandler, PatternMatchingEventHandler
+except ImportError as e:
+    print(f'Missing dependency ({e}): Please install via "pip install watchdog"')
+
 
 class FilesystemObserver(object):
     '''
@@ -28,7 +36,7 @@ class FilesystemObserver(object):
     logger      = None
     
     # Init
-    def __init__(self, path, filetypes=None, handler=None, recursive=None):
+    def __init__(self, path: str, filetypes: Union[str, List[str]]=None, handler: Type[FileSystemEventHandler]=None, recursive: bool=None):
         # Imports
         import logging
         
@@ -55,17 +63,14 @@ class FilesystemObserver(object):
             self._recursive = recursive
     
     # Start & stop the observing
-    def start(self):
+    def start(self) -> None:
         '''
         Start observing the path
         '''
-        # Imports
-        from contextlib import contextmanager
+        
         try:
-            from watchdog.observers import Observer
-            from watchdog.events import FileSystemEventHandler, PatternMatchingEventHandler
-        except ImportError as e:
-            print(f'Missing dependency ({e}): Please install via "pip install watchdog"')
+            type(Observer)
+        except:
             return
         
         # Subclass the Observer class to be able to interrupt the filesystem monitoring
@@ -115,7 +120,7 @@ class FilesystemObserver(object):
             self._watchdog.schedule(eventhandler, path=self._path, recursive=self._recursive)
             self._watchdog.start()
         
-    def stop(self):
+    def stop(self) -> None:
         '''
         Stop observing the path
         '''
@@ -125,7 +130,7 @@ class FilesystemObserver(object):
             self._watchdog = None
         
     # Abstract file event handlers
-    def onFileModified(self, event):
+    def onFileModified(self, event: Type[FileSystemEvent]) -> None:
         '''
         Abstract method executed when a file is modified
         :param watchdog.events.FileModifiedEvent event: The filesystem event
@@ -135,7 +140,7 @@ class FilesystemObserver(object):
         else:
             self.logger.info(f'File "{event.src_path}" modified')
             
-    def onFileCreated(self, event):
+    def onFileCreated(self, event: Type[FileSystemEvent]) -> None:
         '''
         Abstract method executed when a file is created
         :param watchdog.events.FileCreatedEvent event: The filesystem event
@@ -145,7 +150,7 @@ class FilesystemObserver(object):
         else:
             self.logger.info(f'File "{event.src_path}" created')
             
-    def onFileDeleted(self, event):
+    def onFileDeleted(self, event: Type[FileSystemEvent]) -> None:
         '''
         Abstract method executed when a file is deleted
         :param watchdog.events.FileDeletedEvent event: The filesystem event
@@ -155,7 +160,7 @@ class FilesystemObserver(object):
         else:
             self.logger.info(f'File "{event.src_path}" deleted')
             
-    def onFileMoved(self, event):
+    def onFileMoved(self, event: Type[FileSystemEvent]) -> None:
         '''
         Abstract method executed when a file is moved
         :param watchdog.events.FileMovedEvent event: The filesystem event

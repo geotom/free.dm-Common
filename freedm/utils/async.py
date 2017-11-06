@@ -5,12 +5,14 @@ This module provides concurrency related utility methods based on asyncio
 
 # Imports
 import asyncio
+from typing import List, Any, Callable, Coroutine, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 # free.dm Imports
 from freedm.utils.types import TypeChecker as checker
 
-def runConcurrently(function, tasks, *args, max_threads=None, timeout=None):
+
+def runConcurrently(function: Callable, tasks: List[Any], *args, max_threads: int=None, timeout: int=None) -> None:
     '''
     This method runs a given non-coroutine function concurrently for each task item by the help
     of the asyncio module and a concurrent executor. The executor creates a thread 
@@ -31,7 +33,7 @@ def runConcurrently(function, tasks, *args, max_threads=None, timeout=None):
             asyncio.set_event_loop(loop)
                 
         # Create a worker pool for each "task" in the list (which are to be executed parallel        
-        workers = []
+        workers: List[Coroutine[ThreadPoolExecutor, Callable, Tuple]] = []
         with ThreadPoolExecutor(max_workers=max_threads if checker.isInteger(max_threads) else len(tasks)) as executor:
             # Create coroutine threads
             for t in tasks:

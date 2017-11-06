@@ -5,8 +5,10 @@ General utilities to retrieve structured system information of the OS environmen
 
 # Imports
 import os
+from typing import Dict
 
-def getHardwarePlatform():
+
+def getHardwarePlatform() -> str:
     '''
     Returns the hardware platform name or alternatively info about the CPU
     :returns: Hardware platform
@@ -44,7 +46,7 @@ def getHardwarePlatform():
             hw = 'Unknown'
     return hw
 
-def getSystemInfo(pid=os.getpid()):
+def getSystemInfo(pid: int=os.getpid()) -> Dict[str, str]:
     '''
     Returns a dictionary with structured system information
     :returns: System information

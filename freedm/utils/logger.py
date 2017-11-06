@@ -5,11 +5,12 @@ General Logging utilities. Please use this logging facility throughout free.dm p
 
 # Imports
 import logging
+from typing import Type
 
 # free.dm Imports
 from freedm.utils import globals as G
 
-def getLogger(pid=None, level=None):
+def getLogger(pid: int=None, level: int=None):
     '''
     Sets up the Python logging facility with the according integer loglevel
     :param int: The process ID (PID)
@@ -68,6 +69,6 @@ class EventHandler(logging.Handler):
         logging.Handler.__init__(self)
         self.setLevel(logging.INFO)
         
-    def emit(self, record):
+    def emit(self, record: Type[logging.LogRecord]) -> None:
         #print('EVENT EMITTER', record.getMessage())
         pass

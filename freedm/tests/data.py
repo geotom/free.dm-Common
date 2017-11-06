@@ -15,8 +15,9 @@ import json
 from threading import Thread
 
 # free.dm Imports
-import freedm.data.objects as data
+import freedm.data as data
 import freedm.models as models
+
 
 # Setup schema and data for testing
 models.person = {

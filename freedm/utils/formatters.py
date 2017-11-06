@@ -6,6 +6,7 @@ Text formatting util methods
 # Imports
 import json
 import textwrap
+from typing import Dict, List, Any
 
 class TableFormatter(object):
     '''
@@ -19,7 +20,9 @@ class TableFormatter(object):
     keys = None
     widths = {}
     
-    def __init__(self, columns, rowdata, distance=4, maxlength=30, indention=0):
+    Row = Dict[str, str]
+    
+    def __init__(self, columns: Row, rowdata: List[Row], distance: int=4, maxlength: int=30, indention: int=0):
         try:
             # Save arguments
             self.columns    = columns
@@ -41,7 +44,7 @@ class TableFormatter(object):
         except:
             pass
     
-    def render(self):
+    def render(self) -> str:
         '''
         Renders and returns the data as formatted text table
         :returns: The formatted table
@@ -58,7 +61,7 @@ class TableFormatter(object):
             table += row
         return table
     
-def ellipsis(text, length):
+def ellipsis(text, length: int) -> str:
     '''
     Truncates a too long string at the provided length and returns it together with an ellipsis
     :param str text: The text to truncate
@@ -71,9 +74,9 @@ def ellipsis(text, length):
     except:
         return text
     
-def printPrettyDict(obj):
+def printPrettyDict(data: dict) -> None:
     '''
     Prints a dictionary in a readable way with ordered keys
     '''
-    print(json.dumps(obj, indent=4 , sort_keys=True))
+    print(json.dumps(data, indent=4 , sort_keys=True))
         

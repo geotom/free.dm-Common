@@ -9,9 +9,10 @@ import rpyc
 # free.dm Imports
 from freedm.utils import logger as L
 from freedm.utils import globals as G
-from freedm.data.objects import DataManager, IniFileStore
+from freedm.data import DataManager, IniFileStore
 from freedm.utils.types import TypeChecker as checker
 from freedm.daemons.service import ClientService
+
 
 class DaemonClient(object):
     

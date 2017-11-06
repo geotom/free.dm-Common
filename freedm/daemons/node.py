@@ -7,8 +7,8 @@ function as free.dm node daemon.
 
 # free.dm Imports
 from freedm.daemons.daemon import GenericDaemon
-from freedm.data.objects import DatabaseStore
 from freedm.utils.types import TypeChecker as checker
+
 
 class NodeDaemon(GenericDaemon):
     '''

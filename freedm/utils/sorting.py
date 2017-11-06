@@ -5,16 +5,21 @@ General utilities to sort data structures
 
 # Imports
 from functools import reduce
-from typing import Dict, Set
+from typing import Dict, Set, Text
+
+
+# Types
+Module = Text
+Dependency = Set[Module]
 
 # Define custom Exception
 class CyclicReference(Exception):
     """An exception thrown when items define a cyclic dependency that cannot be resolved"""
 
-def topologicalSorter(data : Dict[str, Set]):
+def topologicalSorter(data: Dict[Module, Dependency]) -> List[Module]:
     """
     This function returns a list of topologically ordered items (Dependency graph) of dictionary 
-    items which define dependency among themselves. The functions throws an error 
+    items which define dependencies among themselves. The functions throws an error 
     if a cyclic dependency is found. The data needs to be provided in the following form:
     
     data = {

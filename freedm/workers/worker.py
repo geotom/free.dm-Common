@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 '''
 The generic workers class. A workers is a sub-module of a daemon dealing with a specific task.
 A workers can be a background process, invoked periodically, by event or manually. A workers class must 

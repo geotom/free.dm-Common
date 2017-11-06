@@ -32,16 +32,16 @@ def getLogger(pid=None, level=None):
     # Setup formatting
     if G.MODE == 'debug':
         logging.basicConfig(
-                            format='%(asctime)s %(levelname)-8s %(message)s [%(module)s.%(funcName)s():#%(lineno)s]',
-                            datefmt='%d.%m.%Y %H:%M:%S',
-                            level=level
-                            )
+            format='%(asctime)s %(levelname)-8s %(message)s [%(module)s.%(funcName)s():#%(lineno)s]',
+            datefmt='%d.%m.%Y %H:%M:%S',
+            level=level
+            )
     else:
         logging.basicConfig(
-                            format='%(asctime)s %(levelname)-8s %(message)s',
-                            datefmt='%d.%m.%Y %H:%M:%S',
-                            level=level
-                            )
+            format='%(asctime)s %(levelname)-8s %(message)s',
+            datefmt='%d.%m.%Y %H:%M:%S',
+            level=level
+            )
     
     # Define & return a logger with the process PID
     try:
@@ -53,7 +53,7 @@ def getLogger(pid=None, level=None):
             # Add event emitting handler
             logger.addHandler(EventHandler())
             # Log the setup completion
-            logger.debug('Logging facility set up with log level "{}"'.format(logging.getLevelName(level)))
+            logger.debug(f'Logging facility set up with log level "{logging.getLevelName(level)}"')
             # Return the logger
             return logger
     except:

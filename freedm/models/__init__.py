@@ -12,7 +12,7 @@ try:
     from jsonschema import validate
     from jsonschema.exceptions import ValidationError, SchemaError
 except ImportError as e:
-    print('Missing dependency ({}): Please install via "pip install jsonschema"'.format(e))
+    print(f'Missing dependency ({e}): Please install via "pip install jsonschema"')
 
 # free.dm Imports
 from freedm.utils.formatters import ellipsis
@@ -154,7 +154,7 @@ def getDefaultValue(token):
             key = False
         
         # Get the default class
-        cls = locate('{}.{}'.format(__package__, domain))
+        cls = locate(f'{__package__}.{domain}')
         
         # Find a default value in the domain by key
         if cls and key:
@@ -243,7 +243,7 @@ def getDefaultValue(token):
             raise Exception
     except Exception:
         logger = logging.getLogger(str(os.getpid()))
-        logger.warn('Default value for token "{}" not defined'.format(token))
+        logger.warn(f'Default value for token "{token}" not defined')
     
     # If no default value has been returned so far, we finally return None
     return None
@@ -273,7 +273,7 @@ def getValidatedValue(token, value, **kwargs):
             key = False
             
         # Get the default class
-        cls = locate('{}.{}'.format(__package__, domain))
+        cls = locate(f'{__package__}.{domain}')
         
         # Validate a value against a sub-schema (of a schema module in freedm.models)
         if cls and key:
@@ -286,11 +286,10 @@ def getValidatedValue(token, value, **kwargs):
                 for v in value:
                     k = next(iter(v))
                     checks.append(getValidatedValue(
-                                                    '{}.{}'.format(domain, k),
-                                                    v[k],
-                                                    exception=True
-                                                    )
-                                  )
+                        f'{domain}.{k}',
+                        v[k],
+                        exception=True
+                        ))
                 # Check for an exception
                 if any(isinstance(e, Exception) for e in checks):
                     value = ([e for e in checks if isinstance(e, Exception)] if exception else None)
@@ -320,7 +319,7 @@ def getValidatedValue(token, value, **kwargs):
                         elif t == '+':
                             # Recursively check the values with a token where '+' is substituted
                             checks = []
-                            token_prev_part = '{}.{}'.format(domain, '.'.join(key.split('.')[:i+1]))
+                            token_prev_part = f'{domain}.{".".join(key.split(".")[:i+1])}'
                             token_next_part = '.'.join(key.split('.')[i+2:] if not last else '')
                             token_placeholder = '.'.join([p for p in [token_prev_part, '{}', token_next_part] if p != '' ])
 
@@ -401,14 +400,14 @@ def getValidatedValue(token, value, **kwargs):
                                 value = ValidationError('No validation schema found for token "{}" and new schema properties not allowed by model')
                             else:
                                 value = None
-                                raise UserWarning('No validation schema found for token "{}" and model "{}" does not allow new schema properties'.format(token, domain))
+                                raise UserWarning(f'No validation schema found for token "{token}" and model "{domain}" does not allow new schema properties')
                         else:
                             if schema.get('type') == 'object':
                                 # We warn the user but as we have additionalProperties allowed (object's default), we continue using the value with the new token
-                                raise UserWarning('No validation schema found for token "{}". Define model schema in "freedm.models.{}.py"'.format(token, domain))
+                                raise UserWarning(f'No validation schema found for token "{token}". Define model schema in "freedm.models.{domain}.py"')
                             else:
                                 # Validate against the last schema we found
-                                raise ValidationError('Token "{}" refers to invalid sub-element to property of type "{}"'.format(t, schema.get('type')))
+                                raise ValidationError(f'Token "{t}" refers to invalid sub-element to property of type "{schema.get("type")}"')
                 
                 # Prepare the data (To get rid of dictionaries with numeric keys)
                 dataobject = __prepareCollectionObject(value)
@@ -426,7 +425,7 @@ def getValidatedValue(token, value, **kwargs):
                 else:
                     validate(dataobject, schema)
             else:
-                raise UserWarning('No validation schema found for token "{}.{}.*". Define schema in "freedm.models.{}.py"'.format(domain, tokens[0], domain))
+                raise UserWarning(f'No validation schema found for token "{domain}.{tokens[0]}.*". Define schema in "freedm.models.{domain}.py"')
 
         # Validate against a root schema, for instance just "model", without any further key like "model.?" (schema module in freedm.models)
         elif cls:
@@ -447,9 +446,9 @@ def getValidatedValue(token, value, **kwargs):
                     s_diff = list(set(s_keys) - set(v_keys))
                     v_diff = list(set(v_keys) - set(s_keys))
                     if len(s_diff) > 0:
-                        raise UserWarning('Domain data does not define values for: {}'.format(', '.join(s_diff)))
+                        raise UserWarning(f'Domain data does not define values for: {", ".join(s_diff)}')
                     elif len(v_diff) > 0:
-                        raise ValidationError('Domain data should not contain these additional values ({})'.format(', '.join(v_diff)))
+                        raise ValidationError(f'Domain data should not contain these additional values ({", ".join(v_diff)})')
                     else:
                         for v in v_keys:
                             # Prepare the data (To get rid of dictionaries with numeric keys)
@@ -461,18 +460,18 @@ def getValidatedValue(token, value, **kwargs):
                     validate(value, schema)
         # If no class is found at all, make sure we raise an exception and return "None"
         else:
-            raise UserWarning('No validation schema found for token "{0}.*". Define schema in "freedm.models.{0}.py"'.format(domain))
+            raise UserWarning(f'No validation schema found for token "{domain}.*". Define schema in "freedm.models.{domain}.py"')
     except UserWarning as uw:
         logger = logging.getLogger(str(os.getpid()))
         logger.debug(uw)
     except SchemaError as se:
         logger = logging.getLogger(str(os.getpid()))
-        logger.warn('Validation schema for token "{}" is malformed ({})'.format(token, se.message))
+        logger.warn(f'Validation schema for token "{token}" is malformed ({se.message})')
     except ValidationError as ve:
         try:
             if not exception:
                 logger = logging.getLogger(str(os.getpid()))
-                logger.warn('{} "{}" validation with value "{}" failed ({})'.format('Schema' if token.isalpha() else 'Sub-Schema', token, ellipsis(str(value), 40), ve.message))
+                logger.warn(f'{"Schema" if token.isalpha() else "Sub-Schema"} "{token}" validation with value "{ellipsis(str(value), 40)}" failed ({ve.message})')
         finally:
             # Make sure a "None" will be returned on Validation errors in any case
             value = None if not exception else ve

@@ -68,12 +68,16 @@ class DaemonClient(object):
         self.logger = logger
         
         # Add the default configuration store to data manager
-        self.data.registerStore(IniFileStore(**{
-                                                'name': 'Configuration',
-                                                'alias': 'config',
-                                                'filetype': 'config',
-                                                'synced': False
-                                                }))
+        self.data.registerStore(
+            IniFileStore(
+                **{
+                    'name': 'Configuration',
+                    'alias': 'config',
+                    'filetype': 'config',
+                    'synced': False
+                    }
+                )
+            )
         
         # Try connecting to a running daemon instance on creation
         self.connect(persistent)
@@ -85,24 +89,30 @@ class DaemonClient(object):
         '''
         if not self.connected:
             protocol = {
-                        # We want that public attributes of RPyC netref objects are accessible
-                        'allow_public_attrs': True,
-                        'include_local_traceback': G.MODE == 'debug',
-                        'propagate_KeyboardInterrupt_locally': True,
-                        'propagate_SystemExit_locally': True
-                        }
+                # We want that public attributes of RPyC netref objects are accessible
+                'allow_public_attrs': True,
+                'include_local_traceback': G.MODE == 'debug',
+                'propagate_KeyboardInterrupt_locally': True,
+                'propagate_SystemExit_locally': True
+                }
             try:
                 self._exception = None # Reset
                 self.__connection = rpyc.connect(
-                                                 self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
-                                                 self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'),
-                                                 config=protocol,
-                                                 service=ClientService
-                                                 )
-                self.logger.debug('Established connection to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')))
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'),
+                    config=protocol,
+                    service=ClientService
+                    )
+                self.logger.debug('Established connection to daemon on {}:{}'.format(
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')
+                    ))
             except Exception as e:
                 self._exception = e
-                self.logger.debug('Cannot connect to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')))
+                self.logger.debug('Cannot connect to daemon on {}:{}'.format(
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')
+                    ))
             
             # Keep this connection alive and do not return 
             if self.__connection and persistent:
@@ -126,9 +136,15 @@ class DaemonClient(object):
                 self.__connection.close()
                 self.__connection = None
             except Exception:
-                self.logger.warn('Cannot disconnect from daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')))
+                self.logger.warn('Cannot disconnect from daemon on {}:{}'.format(
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')
+                    ))
         else:
-            self.logger.debug('Not connected to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')))
+            self.logger.debug('Not connected to daemon on {}:{}'.format(
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')
+                ))
             
     def stopDaemon(self):
         '''
@@ -154,22 +170,25 @@ class DaemonClient(object):
                         time.sleep(0.5)
                         counter += 0.5
                         if counter == 10:
-                            print('Waiting for {} daemon to shutdown...'.format(role))
+                            print(f'Waiting for {role} daemon to shutdown...')
                         elif counter == 20:
-                            print('{} daemon seems to be still busy...'.format(role))
+                            print(f'{role} daemon seems to be still busy...')
                         elif counter == 60:
-                            print('{} daemon probably failed to shutdown (still running)'.format(role))
+                            print(f'{role} daemon probably failed to shutdown (still running)')
                             break
                     else:
-                        print('{} daemon stopped'.format(role))
+                        print(f'{role} daemon stopped')
                         break
             except EOFError:
                 pass
             except Exception as e:
-                self.logger.warn('Could not stop {} daemon ({})'.format(role or 'Generic', e))
+                self.logger.warn(f'Could not stop {role or "Generic"} daemon ({e})')
                 
         else:
-            self.logger.debug('Not connected to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+            self.logger.debug('Not connected to daemon on {}:{}'.format(
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                ))
     
     def reloadDaemon(self, data=None):
         '''
@@ -181,9 +200,15 @@ class DaemonClient(object):
             try:
                 self.__connection.root.reloadDaemon(data)
             except EOFError:
-                self.logger.warn('Connection refused by {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+                self.logger.warn('Connection refused by {}:{}'.format(
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                    ))
         else:
-            self.logger.debug('Not connected to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+            self.logger.debug('Not connected to daemon on {}:{}'.format(
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                ))
                 
     def rpcCall(self, rpcmethod, *args, **kwargs):
         '''
@@ -195,11 +220,21 @@ class DaemonClient(object):
                 try:
                     return getattr(self.__connection.root, rpcmethod)(*args, **kwargs)
                 except EOFError:
-                    self.logger.warn('Connection refused by {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+                    self.logger.warn('Connection refused by {}:{}'.format(
+                        self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                        self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                        ))
             else:
-                self.logger.warn('RPC method {0} not supported by {1}:{2}'.format(rpcmethod, self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+                self.logger.warn('RPC method {} not supported by {}:{}'.format(
+                    rpcmethod,
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                    ))
         else:
-            self.logger.debug('Not connected to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+            self.logger.debug('Not connected to daemon on {}:{}'.format(
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                ))
     
     def queryDaemon(self, query):
         '''
@@ -210,9 +245,15 @@ class DaemonClient(object):
             try:
                 self.__connection.root.queryDaemon(query)
             except EOFError:
-                self.logger.warn('Connection refused by {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+                self.logger.warn('Connection refused by {}:{1'.format(
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                    ))
         else:
-            self.logger.debug('Not connected to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+            self.logger.debug('Not connected to daemon on {}:{}'.format(
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                ))
                   
     def getDaemonInfo(self):
         '''
@@ -228,7 +269,7 @@ class DaemonClient(object):
                     return
                 # Get the daemon info & correct template identifier
                 info = self.__connection.root.getSystemInfo()
-                template = '{0}Info'.format(info['role'])
+                template = f'{info["role"]}Info'
                  
                 # Import the correct template string
                 if hasattr(freedm.templates.client, template):
@@ -249,7 +290,13 @@ class DaemonClient(object):
                 # Print info obtained from the daemon
                 print(template.render(info))
             except EOFError:
-                self.logger.warn('Connection refused by {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+                self.logger.warn('Connection refused by {}:{}'.format(
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                    self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                    ))
         else:
-            self.logger.debug('Not connected to daemon on {0}:{1}'.format(self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')))
+            self.logger.debug('Not connected to daemon on {}:{}'.format(
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.port')
+                ))
         

@@ -13,7 +13,7 @@ class ExceptionHandler(object):
     # Init
     def __init__(self, handler):
         try:
-            method = getattr(self.__class__, '{0}Handler'.format(handler))
+            method = getattr(self.__class__, f'{handler}Handler')
             if hasattr(method, '__call__'):
                 sys.excepthook = method
             else:
@@ -23,13 +23,13 @@ class ExceptionHandler(object):
         
     @staticmethod
     def defaultHandler(exctype, value, traceback):
-        print('ERROR: "{0}" TEXT: "{1}"'.format(exctype.__name__, value))
+        print(f'ERROR: "{exctype.__name__}" TEXT: "{value}"')
     
     @staticmethod
     def productHandler(exctype, value, traceback):
-        print('ERROR: "{0}" TEXT: "{1}"'.format(exctype.__name__, value))
+        print(f'ERROR: "{exctype.__name__}" TEXT: "{value}"')
             
     @staticmethod
     def debugHandler(exctype, value, traceback):
-        print('ERROR: "{0}" TEXT: "{1}"'.format(exctype.__name__, value))
+        print(f'ERROR: "{exctype.__name__}" TEXT: "{value}"')
         sys.__excepthook__(exctype, value, traceback)

@@ -5,12 +5,13 @@ General utilities to sort data structures
 
 # Imports
 from functools import reduce
+from typing import Dict, Set
 
 # Define custom Exception
 class CyclicReference(Exception):
     """An exception thrown when items define a cyclic dependency that cannot be resolved"""
 
-def topologicalSorter(data):
+def topologicalSorter(data : Dict[str, Set]):
     """
     This function returns a list of topologically ordered items (Dependency graph) of dictionary 
     items which define dependency among themselves. The functions throws an error 
@@ -44,7 +45,7 @@ def topologicalSorter(data):
             yield ' '.join(sorted(ordered))
             data = {item: (dep - ordered) for item,dep in data.items() if item not in ordered}
         try:
-            assert not data, 'A cyclic dependency exists amongst {}'.format(data)
+            assert not data, f'A cyclic dependency exists amongst {data}'
         except AssertionError as e:
             raise CyclicReference(e)
         

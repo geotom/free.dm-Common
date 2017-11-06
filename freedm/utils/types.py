@@ -147,7 +147,7 @@ class TypeChecker(object):
         :rtype: str
         '''       
         try:
-            return '{}.{}'.format(obj.__class__.__module__, obj.__class__.__name__)
+            return f'{obj.__class__.__module__}.{obj.__class__.__name__}'
         except:
             try:
                 return obj.__class__.__name__

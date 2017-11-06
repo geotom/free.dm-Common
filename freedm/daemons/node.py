@@ -1,5 +1,5 @@
 '''
-The generic node daemon class based on the generic daemon implementation.
+The generic node daemon class uses the generic daemon implementation.
 A node daemon introduces certain properties and methods enabling it to 
 function as free.dm node daemon.
 @author: Thomas Wanderer
@@ -14,12 +14,12 @@ class NodeDaemon(GenericDaemon):
     '''
     A free.dm NodeDaemon is a generic node in the free.dm network,
     participating in communication and offering services. Inherit from 
-    this class to implement specific node roles.
+    this class to implement specific free.dm node roles.
     '''
     
-    _role = 'node'
+    _role : str = 'node'
 
-    _id = 0
+    _id : int = 0
     @property
     def id(self):
         '''The node id serves as address for inter-node communication'''
@@ -44,3 +44,17 @@ class NodeDaemon(GenericDaemon):
         
     def onRpcDisconnect(self):
         print('...A client disconnected')
+        
+    def handleEvent(self, event, *args, **kwargs):
+        '''
+        '''
+        # TODO: Implement an async method triggering direct daemon actions or invoking workers
+        # The events should be queued (one for the daemon or worker wise?) but executed asynchronously!
+        pass
+    
+    def emitEvent(self, event, callback):
+        '''
+        '''
+        # TODO: Implement an async method sending events. This should not be blocked by active workers or handling incoming events!
+        # The emitting of events should also work asynchronously to make sure we can execute the callback
+        pass

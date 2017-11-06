@@ -11,7 +11,7 @@ from datetime import timedelta
 try:
     from rpyc import Service
 except ImportError as e:
-    print('Missing dependency ({}): Please install via "pip install rpyc"'.format(e))
+    print(f'Missing dependency ({e}): Please install via "pip install rpyc"')
 
 # free.dm Imports
 from freedm.utils.types import TypeChecker as checker
@@ -32,7 +32,7 @@ class ClientService(Service):
             if(len(message) <= max_length):
                 print(message)
             else:
-                raise ValueError('Message exceeds {0} characters'. format(max_length))
+                raise ValueError(f'Message exceeds {max_length} characters')
         else:
             raise TypeError('Not a string')
         
@@ -157,14 +157,14 @@ class DaemonService(Service):
         '''
         if self.daemon:
             return dict(
-                        type    = checker.getExactType(self.daemon),
-                        role    = self.daemon.role.capitalize(),
-                        state   = self.daemon.state.capitalize(),
-                        pid     = self.daemon.pid,
-                        version = self.daemon.version,
-                        address = self.daemon.host if not '127.0.0.1' else 'localhost',
-                        port    = self.daemon.port
-                        )
+                type    = checker.getExactType(self.daemon),
+                role    = self.daemon.role.capitalize(),
+                state   = self.daemon.state.capitalize(),
+                pid     = self.daemon.pid,
+                version = self.daemon.version,
+                address = self.daemon.host if not '127.0.0.1' else 'localhost',
+                port    = self.daemon.port
+                )
         else:
             return {}
     
@@ -181,24 +181,21 @@ class DaemonService(Service):
         # Build a dictionary with daemon info 
         info = self.exposed_getDaemonInfo()
         info.update(freedm.utils.system.getSystemInfo(self.daemon.pid))       
-        info.update(
-                    dict(
-                        network         = '{}@{}'.format(platform.node(), self.daemon.data.getConfig('freedm.network.name', 'freedm.network.name')),
-                        system_uptime   = self.exposed_getSystemUptime(),
-                        daemon_uptime   = self.exposed_getDaemonUptime(),
-                        sessions        = []
-                        )
-                    )
+        info.update(dict(
+            network         = f'{platform.node()}@{self.daemon.data.getConfig("freedm.network.name", "freedm.network.name")}',
+            system_uptime   = self.exposed_getSystemUptime(),
+            daemon_uptime   = self.exposed_getDaemonUptime(),
+            sessions        = []
+            ))
         # Get a list of RPC sessions
         for c in self.daemon._getRpcConnections():
             if c != self._conn:
                 try:
                     info['sessions'].append(dict(
-                                                 address=c._channel.stream.sock.getpeername()[0],
-                                                 port=c._channel.stream.sock.getpeername()[1],
-                                                 duration=str(timedelta(seconds = float(time.time() - c.TIME)))
-                                                 )
-                                            )
+                        address=c._channel.stream.sock.getpeername()[0],
+                        port=c._channel.stream.sock.getpeername()[1],
+                        duration=str(timedelta(seconds = float(time.time() - c.TIME)))
+                        ))
                 except:
                     pass
         return info

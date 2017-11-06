@@ -4,8 +4,8 @@ A heavy use of global variables is not advised but in certain cases it is necess
 @author: Thomas Wanderer
 '''
 
-MODE            = 'product'         # Possible values: 'product', 'staging', 'development'
-VERBOSITY       = 3                 # Translates to level "logging.WARN = 30"
-DATA            = './config/'       # Default data storage
-VERSION         = 0
-ERROR           = None              # Set by script
+MODE : str          = 'product'         # Possible values: 'product', 'staging', 'development', 'debug'
+VERBOSITY : int     = 3                 # Translates to level "logging.WARN = 30"
+DATA : str          = './config/'       # Default data storage
+VERSION : str       = '0.1.0'           # A Semantic Versioning number
+ERROR               = None              # Set by script

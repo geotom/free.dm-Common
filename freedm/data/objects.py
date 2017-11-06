@@ -96,18 +96,18 @@ class DataManager(object):
                 elif os.path.exists(path) and os.path.isdir(path) and os.access(path, os.W_OK):
                     self.__path = path
                 else:
-                    self.logger.critical('Cannot access provided storage path "{}"'.format(path))
+                    self.logger.critical(f'Cannot access provided storage path "{path}"')
             else:
                 if not os.path.exists(self.__path) or not os.path.isdir(self.__path) or not os.access(self.__path, os.W_OK):
-                    self.logger.critical('Cannot access default storage path "{}"'.format(self.__path))
+                    self.logger.critical(f'Cannot access default storage path "{self.__path}"')
                     
         except Exception as e:
-            self.logger.warn('Failed to initialize DataManager ({})'.format(e))
-        self.logger.debug('Using data storage location "{}"'.format(self.__path))
+            self.logger.warn(f'Failed to initialize DataManager ({e})')
+        self.logger.debug(f'Using data storage location "{self.__path}"')
         
     # Representation
     def __repr__(self):
-        return '<{0}: {1}>'.format(self.__class__.__name__,  self.path)
+        return f'<{self.__class__.__name__}: {self.path}>'
                 
     # Auto-create Setters & Getters for each registered data store
     def __updateSettersGetters(self):
@@ -130,14 +130,14 @@ class DataManager(object):
         created = []
         for alias in self.__stores:
             # Create Getter & Setter
-            if not hasattr(self, 'get{}'.format(alias)) and not hasattr(self, 'set{}'.format(alias)):
-                setattr(self, 'get{}'.format(alias), lambda token, default=None, store=alias: self.__getStoreValue(token, default, store))
-                setattr(self, 'set{}'.format(alias), lambda token, value=None, store=alias: self.__setStoreValue(token, value, store))
+            if not hasattr(self, f'get{alias}') and not hasattr(self, f'set{alias}'):
+                setattr(self, f'get{alias}', lambda token, default=None, store=alias: self.__getStoreValue(token, default, store))
+                setattr(self, f'set{alias}', lambda token, value=None, store=alias: self.__setStoreValue(token, value, store))
                 created.append(alias)
 
         # Log is we created setter/getter
         for c in created:
-            self.logger.debug('Added data getters & setters for store "{0}" (Use "get{1}" & "set{1}" for access)'.format(self.__stores[c], c))
+            self.logger.debug(f'Added data getters & setters for store "{self.__stores[c]}" (Use "get{c}" & "set{c}" for access)')
 
     # Store lookup
     def _getStore(self, store):
@@ -152,7 +152,7 @@ class DataManager(object):
         try:
             store = store.lower().capitalize()
         except Exception as e:
-            self.logger.warn('Invalid store alias "{}" ({})'.format(store, e))
+            self.logger.warn(f'Invalid store alias "{store}" ({e})')
         
         # Return the data store
         try:
@@ -160,10 +160,10 @@ class DataManager(object):
             if isinstance(store, DataStore):
                 return store
             else:
-                self.logger.warning('Store "{}" is not a proper data store instance'.format(store))
+                self.logger.warning(f'Store "{store}" is not a proper data store instance')
                 return None
         except Exception:
-            self.logger.warning('Store "{}" is not registered'.format(store))
+            self.logger.warning(f'Store "{store}" is not registered')
             return None
         
     def getStores(self):
@@ -187,9 +187,9 @@ class DataManager(object):
             try:
                 store = DataStore(**store)
             except TypeError as e:
-                self.logger.warn('Cannot create data store instance from invalid parameters ({})'.format(e))
+                self.logger.warn(f'Cannot create data store instance from invalid parameters ({e})')
         elif not isinstance(store, DataStore):
-            self.logger.warn('Cannot register invalid store class "{}" in data manager "{}"'.format(store, self))
+            self.logger.warn(f'Cannot register invalid store class "{store}" in data manager "{self}"')
             
         # Add store
         if not store.alias in self.__stores.keys():
@@ -199,13 +199,13 @@ class DataManager(object):
                 store.path = self.path
                 # Warn the user from registering same-type stores with the same path
                 if len(self.__stores) >= 2:
-                    self.logger.warn('Registered store uses "{}". Beware of registering same-type stores with an equal path'.format(self.path))
+                    self.logger.warn(f'Registered store uses "{self.path}". Beware of registering same-type stores with an equal path')
             # Update setters & getters
             self.__updateSettersGetters()
-            self.logger.debug('Registered data store "{}" in data manager "{}"'.format(store, self))
+            self.logger.debug(f'Registered data store "{store}" in data manager "{self}"')
             return True
         else:
-            self.logger.warn('Cannot register a store with name "{}" twice in data manager "{}"'.format(store.alias, self))
+            self.logger.warn(f'Cannot register a store with name "{store.alias}" twice in data manager "{self}"')
         # If store could not be registered
         return False
         
@@ -221,7 +221,7 @@ class DataManager(object):
         if(isinstance(store, str)):
             alias = store.lower().capitalize()
         elif not isinstance(store, DataStore):
-            self.logger.warn('Cannot unregister invalid store class "{}" from data manager "{}"'.format(store, self))
+            self.logger.warn(f'Cannot unregister invalid store class "{store}" from data manager "{self}"')
         else:
             alias = store.alias
             
@@ -233,10 +233,10 @@ class DataManager(object):
             # Remove the store and update setters & getters
             del self.__stores[store.alias]
             self.__updateSettersGetters()
-            self.logger.debug('Unregistered data store "{}" from data manager "{}"'.format(alias, self))
+            self.logger.debug(f'Unregistered data store "{alias}" from data manager "{self}"')
             return True
         else:
-            self.logger.warn('Data store "{}" not registered in data manager "{}"'.format(alias, self))
+            self.logger.warn(f'Data store "{alias}" not registered in data manager "{self}"')
         # If store could not be unregistered
         return False
         
@@ -246,7 +246,7 @@ class DataManager(object):
         back it's data to their data object backends.
         '''
         # Find all stores and data objects to sync
-        self.logger.debug('Syncing persistent data store "{}" backends...'.format(store) if store else 'Syncing all persistent data store backends...')
+        self.logger.debug(f'Syncing persistent data store "{store}" backends...' if store else 'Syncing all persistent data store backends...')
         for k,s in (None, self._getStore(store),) if store else self.stores:
             s.sync()
     
@@ -272,7 +272,7 @@ class DataManager(object):
                           
         # Report any errors
         for e in errors:
-            self.logger.warn('Data store "{}" could not release its filesystem handle ({})'.format(e[0], e[1]))
+            self.logger.warn(f'Data store "{e[0]}" could not release its filesystem handle ({e[1]})')
         
     def __setStoreValue(self, token, value=None, store=None):
         '''
@@ -308,7 +308,7 @@ class DataManager(object):
         try:
             if store: return store.setValue(token, value)
         except Exception as e:
-            self.logger.warn('Writing of new value "{}={}" failed ({})'.format(token, value, e))
+            self.logger.warn(f'Writing of new value "{token}={value}" failed ({e})')
             return False
         
     def __getStoreValue(self, token, default=None, store=None):
@@ -357,7 +357,7 @@ class DataManager(object):
         try:
             if store: return store.getValue(token, default)
         except Exception as e:
-            self.logger.info('Value "{}" lookup failed ({})'.format(token, e))
+            self.logger.info(f'Value "{token}" lookup failed ({e})')
             # The default return if the token's value cannot be found
             if default is not None:
                 if default == token:
@@ -365,7 +365,7 @@ class DataManager(object):
                 else:
                     default = models.getValidatedValue(token, default)
                 if default is not None:
-                    self.logger.info('Value "{}" lookup failed. Using default value "{}"'.format(token, default))
+                    self.logger.info(f'Value "{token}" lookup failed. Using default value "{default}"')
         return default
 
 class DataStore(object):
@@ -409,7 +409,7 @@ class DataStore(object):
             elif os.path.exists(path) and os.path.isdir(path) and os.access(path, os.W_OK):
                 self.__path = path
             else:
-                self.logger.critical('Cannot access provided storage path "{}"'.format(path))
+                self.logger.critical(f'Cannot access provided storage path "{path}"')
                 
     @property
     def filetype(self):
@@ -435,7 +435,7 @@ class DataStore(object):
         if isinstance(name, str) and name.isalpha():
             self.__alias = name.lower().capitalize()
         else:
-            raise AttributeError('Invalid freedm.data.objects.DataStore alias "{}". Must be an alphabetical string'.format(name))
+            raise AttributeError(f'Invalid freedm.data.objects.DataStore alias "{name}". Must be an alphabetical string')
         
     @property
     def name(self):
@@ -449,7 +449,7 @@ class DataStore(object):
         if isinstance(name, str) and name.isalpha():
             self.__name = name
         else:
-            raise AttributeError('Invalid freedm.data.objects.DataStore name "{}". Must be an alphabetical string'.format(name))
+            raise AttributeError(f'Invalid freedm.data.objects.DataStore name "{name}". Must be an alphabetical string')
     
     # Data persistence: Indicates that data of this store is read from/written to a filesystem or database backend
     _persistent = False
@@ -494,7 +494,7 @@ class DataStore(object):
     
     # Representation
     def __repr__(self):
-        return '<{}: {}>'.format(self.__class__.__name__,  self.alias)
+        return f'<{self.__class__.__name__}: {self.alias}>'
     
     # Init
     def __init__(self, name=None, alias=None, description=None, path=None, filetype=None, writable=None, persistent=None, synced=False):
@@ -525,7 +525,7 @@ class DataStore(object):
         
         # Plausibility checks
         if not self.writable and self.persistent:
-            self.logger.warn('Persistent data store "{}" cannot save data (Configured as non writable)'.format(self.alias))
+            self.logger.warn(f'Persistent data store "{self.alias}" cannot save data (Configured as non writable)')
                 
     # Token dissection
     def __tokenize(self, token):
@@ -546,14 +546,14 @@ class DataStore(object):
             keys = token.split('.', 1)
             # Check if the token has a valid length
             if len(keys) < 1 or keys[0].strip() == '':
-                self.logger.warning('Invalid data token "{}" (Too few key tokens)'.format(token))
+                self.logger.warning(f'Invalid data token "{token}" (Too few key tokens)')
             else:
                 # Make sure that we set a data object even it is empty (Empty dictionaries evaluate to "False" in Python)
                 domain = self.getDomain(keys[0])
                 domain = domain if isinstance(domain, DataObject) else keys[0]
                 tokens = keys[1] if len(keys) > 1 else ''
         except Exception as e:
-            self.logger.warning('Could not dissect data token "{}" ({})'.format(token, e))
+            self.logger.warning(f'Could not dissect data token "{token}" ({e})')
          
         # Return the domain part and the key tokens
         return domain, tokens
@@ -608,10 +608,10 @@ class DataStore(object):
         try:
             # Check if store is writeable
             if not self.writable:
-                raise UserWarning('The {} data store "{}" is not writable'.format('persistent' if self.persistent else 'ephemeral', self))
+                raise UserWarning(f'The {"persistent" if self.persistent else "ephemeral"} data store "{self}" is not writable')
             
             # Set the value
-            self.logger.debug('Setting value "{}={}" in data store "{}"'.format(token, value, self))
+            self.logger.debug(f'Setting value "{token}={value}" in data store "{self}"')
             
             # Validate value before we proceed
             if value is not None and models.getValidatedValue(token, value) is None:
@@ -621,7 +621,7 @@ class DataStore(object):
             if value is None:
                 raise UserWarning('Value is "None"')
         except Exception as e:
-            self.logger.warn('Setting value "{}={}" in data store "{}" failed ({})'.format(token, value, self, e))
+            self.logger.warn(f'Setting value "{token}={value}" in data store "{self}" failed ({e})')
             return False
             
         # Get the data domain object (quick lookup attempt, then auto-loading domain)
@@ -645,10 +645,10 @@ class DataStore(object):
                 if dataobject.setValue(key, value):
                     result = True
                     #TODO: We should emit a datachanged event that token "token" has been changed. BUT WAIT. WE SHOULD DO THIS ONLY AFTER WE SYNC IN THE NEXT STEP!!!
-                    print('TODO: Value "{}" changed in store "{}"'.format(dataobject._changed[-1], self))
+                    print(f'TODO: Value "{dataobject._changed[-1]}" changed in store "{self}"')
             except Exception as e:
                 result = False
-                self.logger.warn('Setting value "{}" to data domain "{}" failed ({})'.format(token, domain, e))
+                self.logger.warn(f'Setting value "{token}" to data domain "{domain}" failed ({e})')
             
             # If this store is synced, then also set the raw value immediately
             if result and self.synced and self.persistent:
@@ -658,10 +658,10 @@ class DataStore(object):
                         if key in dataobject._changed:
                             dataobject._changed.remove(key)
                 except Exception as e:
-                    self.logger.warn('Syncing the new value "{}" to the data object backend "{}" failed ({})'.format(token, dataobject._backend, e))   
+                    self.logger.warn(f'Syncing the new value "{token}" to the data object backend "{dataobject._backend}" failed ({e})')   
         else:
             result = False
-            self.logger.warn('Setting value "{}" failed. Data domain "{}" unavailable'.format(token, domain))
+            self.logger.warn(f'Setting value "{token}" failed. Data domain "{domain}" unavailable')
             
         # Return the result
         return True if result else False
@@ -676,7 +676,7 @@ class DataStore(object):
         look up and replace the default value with the token's default value.
         '''
         # Log
-        self.logger.debug('Getting value "{}" from data store "{}"'.format(token, self))
+        self.logger.debug(f'Getting value "{token}" from data store "{self}"')
         
         # Set a default value
         value = None
@@ -685,7 +685,7 @@ class DataStore(object):
         try:
             token = token[:-3] if token.endswith('.[]') else token
         except:
-            self.logger.warn('Getting value "{}" failed (Problem with token)'.format(token))
+            self.logger.warn(f'Getting value "{token}" failed (Problem with token)')
             return value
         
         # Get the data domain object (quick lookup attempt, then auto-loading domain)
@@ -720,11 +720,11 @@ class DataStore(object):
                     # Should we be able to set a maximum TimeToLive for cached data and only then we retrieve the data again as rawValue?
                     
                 except Exception as e:
-                    self.logger.warn('Getting value "{}" from data domain "{}" failed ({})'.format(token, domain, e))
+                    self.logger.warn(f'Getting value "{token}" from data domain "{domain}" failed ({e})')
             except Exception as e:
-                self.logger.warn('Getting value "{}" from data domain "{}" failed ({})'.format(token, domain, e))
+                self.logger.warn(f'Getting value "{token}" from data domain "{domain}" failed ({e})')
         else:
-            self.logger.warn('Getting value "{}" failed. Data domain "{}" unavailable'.format(token, domain))
+            self.logger.warn(f'Getting value "{token}" failed. Data domain "{domain}" unavailable')
 
         # Use the retrieved value or the provided alternative default value and validate
         if value is not None:
@@ -735,9 +735,9 @@ class DataStore(object):
             else:
                 value = models.getValidatedValue(token, default)
             if value is not None:
-                self.logger.info('Getting value "{}" failed. Using default value "{}"'.format(token, value))
+                self.logger.info(f'Getting value "{token}" failed. Using default value "{value}"')
         else:
-            self.logger.info('Getting value "{}" failed. Please set or define a default value'.format(token, value))
+            self.logger.info(f'Getting value "{token}" failed. Please set or define a default value')
         
         # Return the value
         return value
@@ -751,7 +751,7 @@ class DataStore(object):
         :returns: ``True`` if the value could be set
         :rtype: bool
         '''
-        raise NotImplementedError('Abstract method _setRaw not implemented in class "{}.{}"'.format(self.__class__.__module__, self.__class__.__name__))
+        raise NotImplementedError(f'Abstract method _setRaw not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
             
     def _getRaw(self, domain, token):
         '''
@@ -760,7 +760,7 @@ class DataStore(object):
         :param str token: The key token
         :returns: The value
         '''
-        raise NotImplementedError('Abstract method _getRaw not implemented in class "{}.{}"'.format(self.__class__.__module__, self.__class__.__name__))
+        raise NotImplementedError(f'Abstract method _getRaw not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
             
     # Data backend loading        
     def getDomain(self, domain):
@@ -780,7 +780,7 @@ class DataStore(object):
             if isinstance(domain, str):
                 return self.loadDomain(domain)
             else:
-                self.logger.warn('Invalid data domain "{}". Must be a string'.format(domain))
+                self.logger.warn(f'Invalid data domain "{domain}". Must be a string')
                 return None
             
     def loadDomain(self, domain):
@@ -792,7 +792,7 @@ class DataStore(object):
         '''
         try:
             domain = domain.lower()
-            self.logger.debug('Loading data domain "{}" into {} store "{}"'.format(domain, 'persistent' if self.persistent else 'ephemeral', self))
+            self.logger.debug(f'Loading data domain "{domain}" into {"persistent" if self.persistent else "ephemeral"} store "{self}"')
             # Load the domain data from its backend
             dataobject = self._loadDomain(domain, self.path)
             # First evaluate if data object is empty as empty dictionaries evaluate as "False" in Python, otherwise validate the returned domain's data and proceed only if the validation does not fail
@@ -817,7 +817,7 @@ class DataStore(object):
             else:
                 raise Exception('Not a valid DataObject')
         except Exception as e:
-            self.logger.warn('Failed to load data domain "{}" ({})'.format(domain, e))
+            self.logger.warn(f'Failed to load data domain "{domain}" ({e})')
             return None
         
     def unloadDomain(self, domain, sync=False):
@@ -827,7 +827,7 @@ class DataStore(object):
         '''
         try:
             domain = domain.lower()
-            self.logger.debug('Unloading data domain "{}" from {} store "{}"'.format(domain, 'persistent' if self.persistent else 'ephemeral', self.name))
+            self.logger.debug(f'Unloading data domain "{domain}" from {"persistent" if self.persistent else "ephemeral"} store "{self.name}"')
             dataobject = self._data[domain]
             if isinstance(dataobject, DataObject):
                 # Sync data before unloading (Default false)
@@ -850,11 +850,11 @@ class DataStore(object):
                 # Remove domain from data
                 del self._data[domain]
             else:
-                self.logger.warn('Failed to unload data domain "{}" (Domain not loaded)'.format(domain))
+                self.logger.warn(f'Failed to unload data domain "{domain}" (Domain not loaded)')
         except KeyError:
-            self.logger.warn('Failed to unload data domain "{}" (Domain was not loaded)'.format(domain))
+            self.logger.warn(f'Failed to unload data domain "{domain}" (Domain was not loaded)')
         except Exception as e:
-            self.logger.warn('Failed to unload data domain "{}" ({})'.format(domain, e))
+            self.logger.warn(f'Failed to unload data domain "{domain}" ({e})')
             
     def sync(self, force=False):
         '''
@@ -868,7 +868,7 @@ class DataStore(object):
         '''
         # Check if we can sync to backend
         if self.persistent:
-            self.logger.debug('Syncing persistent store "{}"'.format(self))
+            self.logger.debug(f'Syncing persistent store "{self}"')
             
             # Get the domain data objects that require being synced
             if force:
@@ -921,7 +921,7 @@ class DataStore(object):
             # Reset the change logs of the ephemeral store's domains
             for domain in self.getSyncDomains():
                 self._data[domain].clearTainted()
-            self.logger.warn('Store "{}" cannot be synced ("{}" is not persistent)'.format(self, self))
+            self.logger.warn(f'Store "{self}" cannot be synced ("{self}" is not persistent)')
     
     def syncDomain(self, domain, force=False):
         '''
@@ -954,18 +954,18 @@ class DataStore(object):
                     # TodO: Async IO implementieren
                     
                     try:
-                        self.logger.debug('Syncing persistent data domain "{}" of "{}"'.format(domain, self))
+                        self.logger.debug(f'Syncing persistent data domain "{domain}" of "{self}"')
                         # We must set the syncing status
                         dataobject.syncing = True
                         self._syncDomain(dataobject, self.path)
                     except Exception as e:
-                        self.logger.warn('Failed to sync data domain "{}" of "{}" ({})'.format(domain, self, e))
+                        self.logger.warn(f'Failed to sync data domain "{domain}" of "{self}" ({e})')
                     finally:
                         dataobject.syncing = False
         # Reset the change logs of the ephemeral store domains
         else:
             dataobject.clearTainted()
-            self.logger.warn('Data domain "{}" cannot be synced ("{}" is not persistent)'.format(domain, self))
+            self.logger.warn(f'Data domain "{domain}" cannot be synced ("{self}" is not persistent)')
             
     def getSyncDomains(self):
         '''
@@ -991,7 +991,7 @@ class DataStore(object):
         :returns: The domain DataObject
         :rtype: py:class::freedm.data.objects.DataObject
         '''
-        raise NotImplementedError('Abstract method _loadDomain not implemented in class "{}.{}"'.format(self.__class__.__module__, self.__class__.__name__))
+        raise NotImplementedError(f'Abstract method _loadDomain not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
         
     def _unloadDomain(self, domain, path):
         '''
@@ -999,7 +999,7 @@ class DataStore(object):
         :param py:class::freedm.data.objects.DataObject domain: The data domain object
         :param str path: The file system location (folder)
         '''
-        raise NotImplementedError('Abstract method _unloadDomain not implemented in class "{}.{}"'.format(self.__class__.__module__, self.__class__.__name__))
+        raise NotImplementedError(f'Abstract method _unloadDomain not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
         
     def _syncDomain(self, domain, path):
         '''
@@ -1099,7 +1099,7 @@ class IniFileStore(DataStore):
         # Gather INI files to load
         files = []
         for file in os.listdir(self.path):
-            if file.endswith('.{}'.format(self.filetype)):
+            if file.endswith(f'.{self.filetype}'):
                 files.append(str(os.path.splitext(file)[0]))
         
         # Load INI files concurrently
@@ -1142,9 +1142,9 @@ class IniFileStore(DataStore):
             if self._iohandle is None and self.path is not None:
                 self._iohandle = Observer(self.path, filetypes=self.filetype)
                 self._iohandle.start()
-                self.logger.debug('Data store "{}" now observes path "{}" (Files: "*.{}")'.format(self, self.path, self.filetype))
+                self.logger.debug(f'Data store "{self}" now observes path "{self.path}" (Files: "*.{self.filetype}")')
         except Exception as e:
-            self.logger.warn('Cannot observe path ({})'.format(e))
+            self.logger.warn(f'Cannot observe path ({e})')
             
     # Release the directory observer
     def releaseHandle(self):
@@ -1152,9 +1152,9 @@ class IniFileStore(DataStore):
             try:
                 self._iohandle.stop()
                 self._iohandle = None
-                self.logger.debug('Data store "{}" stopped observing path "{}" (Files: "*.{}")'.format(self, self.path, self.filetype))
+                self.logger.debug(f'Data store "{self}" stopped observing path "{self.path}" (Files: "*.{self.filetype}")')
             except Exception as e:
-                self.logger.warn('Failed to stop filesystem observer for path ({})'.format(e))
+                self.logger.warn(f'Failed to stop filesystem observer for path ({e})')
                 raise e
             
     # Implement data setters & getter
@@ -1173,7 +1173,7 @@ class IniFileStore(DataStore):
     def _loadDomain(self, domain, path):
         try:
             # The backend file
-            inifile = os.path.join(path, '{}.{}'.format(domain, self.filetype))
+            inifile = os.path.join(path, f'{domain}.{self.filetype}')
             
             # Read the data from file & convert values
             parser = SafeConfigParser()
@@ -1209,7 +1209,7 @@ class IniFileStore(DataStore):
                     except Exception as e:
                         print(e.__class__.__name__)
                         if e.__class__.__name__ in ('json.JSONDecodeError', 'ValueError'):
-                            raise UserWarning('File "{}" cannot be JSON-decoded ({})!'.format(inifile, e))
+                            raise UserWarning(f'File "{inifile}" cannot be JSON-decoded ({e})!')
                         else:
                             items.append(item)
                 # Re-add all items & sections 
@@ -1220,7 +1220,7 @@ class IniFileStore(DataStore):
                 data = DataObject(backend=inifile, **inidata)
                 return data
         except FileNotFoundError:
-            raise UserWarning('File "{}" does not exist. Please create this file!'.format(inifile))
+            raise UserWarning(f'File "{inifile}" does not exist. Please create this file!')
         except Exception as e:
             raise e
         
@@ -1549,17 +1549,17 @@ class DataObject(dict):
                             except:
                                 pass
                         if len(i) == 0:
-                            raise Exception('Key "{}" not set in any objects'.format(key))
+                            raise Exception(f'Key "{key}" not set in any objects')
                         else:
                             data = i
                     else:
-                        raise Exception('Key/value mismatch for "{}"'.format(key))
+                        raise Exception(f'Key/value mismatch for "{key}"')
         except KeyError:
-            raise LookupError('Key "{}" of Token "{}" not found'.format(key, token))
+            raise LookupError(f'Key "{key}" of Token "{token}" not found')
         except IndexError:
-            raise LookupError('Key "{}" of Token "{}" out if index'.format(key, token))
+            raise LookupError(f'Key "{key}" of Token "{token}" out if index')
         except Exception as e:
-            raise LookupError('Token "{}" lookup failed ({})'.format(token, e))
+            raise LookupError(f'Token "{token}" lookup failed ({e})')
         
         # Return the data matching the token
         

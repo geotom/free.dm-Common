@@ -1,3 +1,5 @@
 raet
 rpyc
 jsonschema
+semver
+jinja2

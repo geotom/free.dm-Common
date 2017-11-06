@@ -37,14 +37,14 @@ class FilesystemObserver(object):
         
         # Set path attribute
         if not os.path.exists(path):
-            raise('(Path "{}" does not exist)'.format(path))
+            raise(f'(Path "{path}" does not exist)')
         else:
             self._path = path
             
         # Set filetype attribute
         if filetypes is not None: 
             for e in map(lambda ft: ft.split('.', 1)[-1], (filetypes,) if isinstance(filetypes, str) else (filetypes if isinstance(filetypes, list) else ())):
-                self._extensions.append('*.{}'.format(e))
+                self._extensions.append(f'*.{e}')
                 
         # Set optional handler
         if handler is not None:
@@ -65,7 +65,7 @@ class FilesystemObserver(object):
             from watchdog.observers import Observer
             from watchdog.events import FileSystemEventHandler, PatternMatchingEventHandler
         except ImportError as e:
-            print('Missing dependency ({}): Please install via "pip install watchdog"'.format(e))
+            print(f'Missing dependency ({e}): Please install via "pip install watchdog"')
             return
         
         # Subclass the Observer class to be able to interrupt the filesystem monitoring
@@ -96,16 +96,16 @@ class FilesystemObserver(object):
         # Define custom event listener
         if not isinstance(self._handler, FileSystemEventHandler):
             self._handler = type(
-                                 'EventHandler',
-                                 (PatternMatchingEventHandler, ),
-                                 {
-                                  'patterns': self._extensions if len(self._extensions) > 0 else ('.*'),
-                                  'on_modified': self.onFileModified,
-                                  'on_created': self.onFileCreated,
-                                  'on_deleted': self.onFileDeleted,
-                                  'on_moved': self.onFileMoved
-                                  }
-                                 )
+                'EventHandler',
+                (PatternMatchingEventHandler, ),
+                {
+                    'patterns': self._extensions if len(self._extensions) > 0 else ('.*'),
+                    'on_modified': self.onFileModified,
+                    'on_created': self.onFileCreated,
+                    'on_deleted': self.onFileDeleted,
+                    'on_moved': self.onFileMoved
+                    }
+                )
         
         # Start observer
         if self._path is not None:
@@ -131,9 +131,9 @@ class FilesystemObserver(object):
         :param watchdog.events.FileModifiedEvent event: The filesystem event
         '''
         if self.__class__.__name__ != 'FilesystemObserver':
-            self.logger.debug('Class "{}" does not implement the "onFileModified" method'.format(self.__class__.__name__))
+            self.logger.debug(f'Class "{self.__class__.__name__}" does not implement the "onFileModified" method')
         else:
-            self.logger.info('File "{}" modified'.format(event.src_path))
+            self.logger.info(f'File "{event.src_path}" modified')
             
     def onFileCreated(self, event):
         '''
@@ -141,9 +141,9 @@ class FilesystemObserver(object):
         :param watchdog.events.FileCreatedEvent event: The filesystem event
         '''
         if self.__class__.__name__ != 'FilesystemObserver':
-            self.logger.debug('Class "{}" does not implement the "onFileModified" method'.format(self.__class__.__name__))
+            self.logger.debug(f'Class "{self.__class__.__name__}" does not implement the "onFileModified" method')
         else:
-            self.logger.info('File "{}" created'.format(event.src_path))
+            self.logger.info(f'File "{event.src_path}" created')
             
     def onFileDeleted(self, event):
         '''
@@ -151,9 +151,9 @@ class FilesystemObserver(object):
         :param watchdog.events.FileDeletedEvent event: The filesystem event
         '''
         if self.__class__.__name__ != 'FilesystemObserver':
-            self.logger.debug('Class "{}" does not implement the "onFileModified" method'.format(self.__class__.__name__))
+            self.logger.debug(f'Class "{self.__class__.__name__}" does not implement the "onFileModified" method')
         else:
-            self.logger.info('File "{}" deleted'.format(event.src_path))
+            self.logger.info(f'File "{event.src_path}" deleted')
             
     def onFileMoved(self, event):
         '''
@@ -161,6 +161,6 @@ class FilesystemObserver(object):
         :param watchdog.events.FileMovedEvent event: The filesystem event
         '''
         if self.__class__.__name__ != 'FilesystemObserver':
-            self.logger.debug('Class "{}" does not implement the "onFileModified" method'.format(self.__class__.__name__))
+            self.logger.debug(f'Class "{self.__class__.__name__}" does not implement the "onFileModified" method')
         else:
-            self.logger.info('File "{}" moved to "{}"'.format(event.src_path, event.dest_path))
+            self.logger.info(f'File "{event.src_path}" moved to "{event.dest_path}"')

@@ -53,39 +53,39 @@ def getSystemInfo(pid=os.getpid()):
     import platform, psutil, grp
     # Build a dictionary with daemon info 
     info = dict(
-                os          = '{0} ({1}, {2})'.format(' '.join(platform.dist()), platform.release(), platform.architecture()[0]),
-                platform    = getHardwarePlatform(),
-                memory      = {},
-                disks       = [],
-                nics        = []
-                )
+        os          = f'{" ".join(platform.dist())} ({platform.release()}, {platform.architecture()[0]})',
+        platform    = getHardwarePlatform(),
+        memory      = {},
+        disks       = [],
+        nics        = []
+        )
     
     # Get memory information
     m = psutil.virtual_memory()
     s = psutil.swap_memory()
     info['memory'] = dict(
-                          mem_total     = round(m.total / float(1024), 1),
-                          mem_used      = round(m.total / float(1024), 1) - round(m.available / float(1024), 1),
-                          mem_free      = round(m.available / float(1024), 1),
-                          swap_total    = round(s.total / float(1024), 1),
-                          swap_used     = round(s.used / float(1024), 1),
-                          swap_free     = round(s.total / float(1024), 1)
-                          )
+        mem_total     = round(m.total / float(1024), 1),
+        mem_used      = round(m.total / float(1024), 1) - round(m.available / float(1024), 1),
+        mem_free      = round(m.available / float(1024), 1),
+        swap_total    = round(s.total / float(1024), 1),
+        swap_used     = round(s.used / float(1024), 1),
+        swap_free     = round(s.total / float(1024), 1)
+        )
     
     # Get process information   
     p = psutil.Process(pid)
     info['process'] = dict(
-                           pid              = p.pid,
-                           user             = p.username(),
-                           group            = grp.getgrgid(p.gids().real)[0],
-                           uid              = p.uids().real,
-                           gid              = p.gids().real,
-                           threads          = p.num_threads(),
-                           memory_rss       = round(p.memory_info().rss / float(1024 ** 2), 1),
-                           memory_vms       = round(p.memory_info().vms / float(1024 ** 2), 1),
-                           memory_rss_pct   = round(p.memory_percent(), 1),
-                           memory_vms_pct   = round(p.memory_percent(memtype='vms'), 1)
-                           )
+        pid              = p.pid,
+        user             = p.username(),
+        group            = grp.getgrgid(p.gids().real)[0],
+        uid              = p.uids().real,
+        gid              = p.gids().real,
+        threads          = p.num_threads(),
+        memory_rss       = round(p.memory_info().rss / float(1024 ** 2), 1),
+        memory_vms       = round(p.memory_info().vms / float(1024 ** 2), 1),
+        memory_rss_pct   = round(p.memory_percent(), 1),
+        memory_vms_pct   = round(p.memory_percent(memtype='vms'), 1)
+        )
     
     # Get network information
     nic     = psutil.net_if_addrs()
@@ -93,31 +93,29 @@ def getSystemInfo(pid=os.getpid()):
     nic_s   = psutil.net_if_stats()
     for n in nic:
         ni = dict(
-                  name      = n,
-                  addrs     = [],
-                  counter   = dict(nic_c[n]._asdict()),
-                  speed     = nic_s[n].speed,
-                  mtu       = nic_s[n].mtu,
-                  )
+            name      = n,
+            addrs     = [],
+            counter   = dict(nic_c[n]._asdict()),
+            speed     = nic_s[n].speed,
+            mtu       = nic_s[n].mtu,
+            )
         for a in nic[n]:            
             ni['addrs'].append(dict(
-                                    family  = a.family.name.replace('AF_', '').lower(),
-                                    address = a.address,
-                                    mask    = a.netmask,
-                                    bcast   = a.broadcast,
-                                    ptp     = a.ptp
-                                    )
-                               )
+                family  = a.family.name.replace('AF_', '').lower(),
+                address = a.address,
+                mask    = a.netmask,
+                bcast   = a.broadcast,
+                ptp     = a.ptp
+                ))
         info['nics'].append(ni)
         
     # Get disk partitions
     for p in psutil.disk_partitions():
         info['disks'].append(dict(
-                                  device        = p.device,
-                                  mountpoint    = p.mountpoint,
-                                  usage         = dict(psutil.disk_usage(p.mountpoint)._asdict())
-                                  )
-                             )   
+            device        = p.device,
+            mountpoint    = p.mountpoint,
+            usage         = dict(psutil.disk_usage(p.mountpoint)._asdict())
+            ))   
     
     # Return info
     return info

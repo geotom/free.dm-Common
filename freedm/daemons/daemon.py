@@ -10,15 +10,16 @@ import argparse
 try:
     import psutil
 except ImportError as e:
-    print('Missing dependency ({}): Please install via "pip install psutil"'.format(e))
+    print(f'Missing dependency ({e}): Please install via "pip install psutil"')
 from threading import Thread
+from typing import Dict, List
 
 # RPyC imports
 try:
     from rpyc.utils.server import ThreadPoolServer, ThreadedServer
     from rpyc.utils.authenticators import AuthenticationError
 except ImportError as e:
-    print('Missing dependency ({}): Please install via "pip install rpyc"'.format(e))
+    print(f'Missing dependency ({e}): Please install via "pip install rpyc"')
 
 # free.dm Imports
 from freedm.utils import logger as L
@@ -37,13 +38,13 @@ class GenericDaemon(ThreadedServer):
     '''
         
     __states = (
-                'idle',
-                'starting',
-                'running',
-                'loading',
-                'stopping',
-                'crashed'
-                )
+        'idle',
+        'starting',
+        'running',
+        'loading',
+        'stopping',
+        'crashed'
+        )
     
     # Intermediate dictionary for service class generation. Gets reset after the GenericService has been created
     __rpc = {}
@@ -53,12 +54,12 @@ class GenericDaemon(ThreadedServer):
     
     # The sub thread started by this daemon instance
     __subthreads = {
-                    'watchdog': None,
-                    'services': None
-                    }
+        'watchdog': None,
+        'services': None
+        }
     
     # Sessions for kept alive connections
-    __sessions = {}
+    __sessions : Dict = {}
     
     # The Threaded RPyC server does not keep a queue of active connections so we do this instead
     __connections = []
@@ -116,7 +117,7 @@ class GenericDaemon(ThreadedServer):
         '''The version of this daemon'''
         return self._version
     @version.setter
-    def version(self, role):
+    def version(self, version):
         raise AttributeError('You cannot change the version of a daemon instance')
             
     _pid = os.getpid()
@@ -146,7 +147,7 @@ class GenericDaemon(ThreadedServer):
            
         # Get a list of possible processes (matching the script name and invocation method)
         nulldevice  = open(os.devnull, 'w')
-        command     = 'ps ax -o pid= -o args= | grep "{0} [A-Za-z].* start"'.format(file)
+        command     = f'ps ax -o pid= -o args= | grep "{file} [A-Za-z].* start"'
         try:
             for line in subprocess.check_output(command, shell=True , stderr=nulldevice).decode('utf-8').strip().split('\n'):
                 try:                        
@@ -181,16 +182,16 @@ class GenericDaemon(ThreadedServer):
         To access the current daemon instance of this service class use ``self.daemon``
         :param function function: The function to expose as daemon RPyC service method 
         '''
-        self.__rpc.update({'exposed_{0}'.format(function.__name__): function})
+        self.__rpc.update({f'exposed_{function.__name__}': function})
                
     # Representation
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '<{}@{}:{} (Process: {})>'.format(
-                                                 self.__class__.__name__,
-                                                 self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
-                                                 self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'),
-                                                 self.pid
-                                                 )
+            self.__class__.__name__,
+            self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+            self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'),
+            self.pid
+            )
 
     # Class instance creation
     def __new__(cls, parser=None, logger=None):
@@ -216,7 +217,7 @@ class GenericDaemon(ThreadedServer):
                 # Execute the action
                 if client.connected:
                     if action == 'start':
-                        print('{} daemon is already running'.format(role.capitalize()))
+                        print(f'{role.capitalize()} daemon is already running')
                     elif action == 'info':
                         client.getDaemonInfo()
                     elif action == 'reload':
@@ -224,7 +225,7 @@ class GenericDaemon(ThreadedServer):
                     elif action == 'stop':
                         client.stopDaemon()
                 else:
-                    print('Cannot connect to {} daemon'.format(role))
+                    print(f'Cannot connect to {role} daemon')
                 # Return the client
                 return client
             else:
@@ -232,10 +233,9 @@ class GenericDaemon(ThreadedServer):
                     # Create and return a GenericDaemon or subclass instance
                     return parent.__new__(cls)
                 else:
-                    print('{} daemon not running'.format(role.capitalize()))
+                    print(f'{role.capitalize()} daemon not running')
         
         def queryHandler(arguments):
-            print(arguments._get_args())
             # In case of zero arguments
             if len(arguments._get_args()) is 0:
                 parser.print_help()
@@ -246,7 +246,7 @@ class GenericDaemon(ThreadedServer):
             # Open a persistent connection to the server instance
             client = DaemonClient(data=G.DATA, logger=logger, persistent=True)
             if not client._exception is None:
-                print('{} daemon not running'.format(role.capitalize()))
+                print(f'{role.capitalize()} daemon not running')
             return client
         
         # Get the provided parser or setup the default argument parser object
@@ -255,70 +255,71 @@ class GenericDaemon(ThreadedServer):
                 raise Exception
         except:
             parser = argparse.ArgumentParser(
-                                             prog=os.path.basename(__file__),
-                                             description='The free.dm {} console:'.format(role.capitalize()),
-                                             add_help=True
-                                             )
+                prog=os.path.basename(__file__),
+                description=f'The free.dm {role.capitalize()} console:',
+                add_help=True
+                )
+            
         subparser = parser.add_subparsers(
-                                          help='Module description',
-                                          dest='module'
-                                          )
+            help='Module description',
+            dest='module'
+            )
         subparser_defaults = argparse.ArgumentParser(add_help=False)
         subparser_defaults.add_argument(
-                                        '--verbosity',
-                                        type=int,
-                                        metavar='INT',
-                                        help='Regulate the output verbosity (Default={})'.format(G.VERBOSITY),
-                                        default=G.VERBOSITY
-                                        )
+            '--verbosity',
+            type=int,
+            metavar='INT',
+            help=f'Regulate the output verbosity (Default={G.VERBOSITY})',
+            default=G.VERBOSITY
+            )
         subparser_defaults.add_argument(
-                                        '--config',
-                                        type=str,
-                                        metavar='FOLDER',
-                                        help='Provide an alternative config location',
-                                        default=G.DATA
-                                        )
+            '--config',
+            type=str,
+            metavar='FOLDER',
+            help='Provide an alternative config location',
+            default=G.DATA
+            )
         subparser_defaults.add_argument(
-                                        '--debug',
-                                        action='store_true',
-                                        help='Set the debug mode',
-                                        default=False
-                                        )
+            '--debug',
+            action='store_true',
+            help='Set the debug mode',
+            default=False
+            )
         
         # Daemon control subparser
         parser_daemon = subparser.add_parser(
-                                              'server',
-                                              help='Control the {} daemon'.format(role),
-                                              description='Start and control the free.dm {} daemon:'.format(role),
-                                              parents=[subparser_defaults]
-                                              )
+            'server',
+            help=f'Control the {role} daemon',
+            description=f'Start and control the free.dm {role} daemon:',
+            parents=[subparser_defaults]
+            )
         parser_daemon.set_defaults(handler=daemonHandler)
         parser_daemon.add_argument(
-                                   'action',
-                                   choices=['start', 'stop', 'reload', 'info']
-                                   )
+            'action',
+            choices=['start', 'stop', 'reload', 'info']
+            )
          
         # Query menu subparser
         parser_query = subparser.add_parser(
-                                             'query',
-                                             help='Query the {} API'.format(role),
-                                             description='Query the free.dm {} API:'.format(role),
-                                             formatter_class=argparse.RawDescriptionHelpFormatter,
-                                             parents=[subparser_defaults]
-                                             )
+            'query',
+            help=f'Query the {role} API',
+            description=f'Query the free.dm {role} API:',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            parents=[subparser_defaults]
+            )
         parser_query.set_defaults(handler=queryHandler)
         parser_query.add_argument(
-                                  'module',
-                                  choices=['module 1', 'module 2', 'module 3', 'module 4']
-                                  )
+            'module',
+            choices=['module 1', 'module 2', 'module 3', 'module 4']
+            )
         
         # Monitor console subparser
         parser_monitor = subparser.add_parser(
-                                              'monitor',
-                                              help='Monitor the {} daemon'.format(role),
-                                              description='Start a monitoring console displaying daemon events',
-                                              parents=[subparser_defaults]
-                                              )
+            'monitor',
+            help=f'Monitor the {role} daemon',
+            description='Start a monitoring console displaying daemon events',
+            parents=[subparser_defaults]
+            )
         parser_monitor.set_defaults(handler=monitorHandler)
          
         # Get parsed arguments from executed script
@@ -331,7 +332,7 @@ class GenericDaemon(ThreadedServer):
                 G.VERBOSITY = (6 - arguments.verbosity) * 10
                 
             # Set debug mode based on environment/arguments
-            if (hasattr(arguments, 'debug') and arguments.debug) or not os.path.exists('freedm'):
+            if (hasattr(arguments, 'debug') and arguments.debug):
                 G.MODE = 'debug'
                 
             # Create a default logger if not set (only after we updated the G.MODE and G.VERBOSITY)
@@ -378,12 +379,16 @@ class GenericDaemon(ThreadedServer):
         self.data = G.DATA
         
         # Add the daemon's configuration store to data manager
-        self.data.registerStore(IniFileStore(**{
-                                                'name': 'Configuration',
-                                                'alias': 'config',
-                                                'filetype': 'config',
-                                                'synced': True
-                                                }))
+        self.data.registerStore(
+            IniFileStore(
+                **{
+                    'name': 'Configuration',
+                    'alias': 'config',
+                    'filetype': 'config',
+                    'synced': True
+                    }
+                )
+            )
         
         # Spawn the daemon and init the superclass
         self._spawnDaemon()
@@ -507,7 +512,7 @@ class GenericDaemon(ThreadedServer):
         your daemon logic
         '''
         if self.__class__.__name__ != 'GenericDaemon':
-            raise NotImplementedError('Class "{}" requires an implementation of function "onDaemonStart"'.format(self.__class__.__name__))
+            raise NotImplementedError(f'Class "{self.__class__.__name__}" requires an implementation of function "onDaemonStart"')
     
     def onDaemonHalt(self):
         ''' 
@@ -515,7 +520,7 @@ class GenericDaemon(ThreadedServer):
         your daemon logic
         '''
         if self.__class__.__name__ != 'GenericDaemon':
-            raise NotImplementedError('Class "{}" requires an implementation of function "onDaemonHalt"'.format(self.__class__.__name__))
+            raise NotImplementedError(f'Class "{self.__class__.__name__}" requires an implementation of function "onDaemonHalt"')
     
     def notifyRpcClient(self, client, message):
         ''' 
@@ -526,24 +531,28 @@ class GenericDaemon(ThreadedServer):
         try:
             client.root.printMessage(message)
         except:
-            self.logger.debug('Could not send message to client ({0})'.format(message[0:50]))
+            self.logger.debug(f'Could not send message to client ({message[0:50]})')
                 
     def _stopDaemon(self):
         '''
         Halts this daemon instance and its subthreads, disconnecting all clients and unbinding from the socket
         '''
-        self.logger.info('Halting free.dm {0} daemon at {1}:{2}...'.format(self.role.capitalize(), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')))
+        self.logger.info('Halting free.dm {} daemon at {}:{}...'.format(
+            self.role.capitalize(),
+            self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+            self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')
+            ))
         
         # Execute custom daemon procedures before we shutdown the daemon
         try:
             self.onDaemonHalt()
         except Exception as e:
-            self.logger.warn('Error when halting {} daemon ({})'.format(self.role.capitalize(), e))
+            self.logger.warn(f'Error when halting {self.role.capitalize()} daemon ({e})')
         
         # Notify active clients about daemon halt
         try:
             for c in self._getRpcConnections():
-                self.notifyRpcClient(c, '{} daemon stopped'.format(self.role.capitalize()))
+                self.notifyRpcClient(c, f'{self.role.capitalize()} daemon stopped')
         except:
             pass
         
@@ -554,7 +563,7 @@ class GenericDaemon(ThreadedServer):
         try:
             self.data.sync()
         except Exception as e:
-            self.logger.warn('{} daemon could not sync back its data ({})'.format(self.role.capitalize(), e))
+            self.logger.warn(f'{self.role.capitalize()} daemon could not sync back its data ({e})')
         finally:
             self.data.release()
 
@@ -563,7 +572,11 @@ class GenericDaemon(ThreadedServer):
             self.state = 'idle'
             self.close()
         except:
-            self.logger.warn('Could not properly stop free.dm {0} daemon at {1}:{2}...'.format(self.role.capitalize(), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')))
+            self.logger.warn('Could not properly stop free.dm {} daemon at {}:{}...'.format(
+                self.role.capitalize(),
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')
+                ))
         # Make sure we really set the idle state in any case!
         finally:
             self.state = 'idle'
@@ -585,7 +598,11 @@ class GenericDaemon(ThreadedServer):
         '''
         Spawns this daemon server instance listening to RPC requests
         '''
-        self.logger.info('Starting free.dm {0} daemon at {1}:{2}...'.format(self.role.capitalize(), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')))
+        self.logger.info('Starting free.dm {} daemon at {}:{}...'.format(
+            self.role.capitalize(),
+            self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+            self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port')
+            ))
         
         # Indicate the new state
         self.state = 'starting'
@@ -622,32 +639,32 @@ class GenericDaemon(ThreadedServer):
         self.__rpc.update({'__daemon': self})
 
         # Define a rpyc.Service class with the exposed methods set by the @rpcmethod decorator and reset the __rpc variable
-        service = type('{0}Service'.format(self.__class__.__name__), (DaemonService,), self.__rpc)
+        service = type(f'{self.__class__.__name__}Service', (DaemonService,), self.__rpc)
         self.__rpc = {} # Reset
         
         # Define connection properties (aka as RPyC protocol)
         protocol = {
-                    # We want that public attributes of RPyC netref objects are accessible
-                    'allow_public_attrs': True,
-                    'include_local_traceback': G.MODE == 'debug'
-                    #'allow_all_attrs':  True,
-                    #'allow_setattr':    True,
-                    #'allow_delattr':    True
-                    }
+            # We want that public attributes of RPyC netref objects are accessible
+            'allow_public_attrs': True,
+            'include_local_traceback': G.MODE == 'debug'
+            #'allow_all_attrs':  True,
+            #'allow_setattr':    True,
+            #'allow_delattr':    True
+            }
         
         # Init the RPyC server: Set the dynamically defined service class, address, port and connection properties
         try:
             super().__init__(
-                             service,
-                             hostname = self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
-                             port = self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'),
-                             ipv6 = False,
-                             protocol_config = protocol,
-                             authenticator = authentication,
-                             logger = self.logger
-                             )
+                service,
+                hostname = self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                port = self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'),
+                ipv6 = False,
+                protocol_config = protocol,
+                authenticator = authentication,
+                logger = self.logger
+                )
         except Exception as e:
-            self.logger.critical('Could not init free.dm {} daemon class ({})'.format(self.role.capitalize(), e))
+            self.logger.critical(f'Could not init free.dm {self.role.capitalize()} daemon class ({e})')
             self.close()
             self.state = 'crashed'
             return
@@ -658,13 +675,13 @@ class GenericDaemon(ThreadedServer):
         except KeyboardInterrupt:
             print('')
             self.logger.warn('Keyboard interrupt!')
-            self.logger.info('{} daemon startup aborted by user'.format(self.role.capitalize()))
+            self.logger.info(f'{self.role.capitalize()} daemon startup aborted by user')
             self.close()
             self._stopDaemon()
-            print('{} daemon stopped'.format(self.role.capitalize()))
+            print(f'{self.role.capitalize()} daemon stopped')
             return
         except Exception as e:
-            self.logger.critical('Error when starting up free.dm {} daemon ({})'.format(self.role.capitalize(), e))
+            self.logger.critical(f'Error when starting up free.dm {self.role.capitalize()} daemon ({e})')
             self.state = 'crashed'
             self.close()
             return
@@ -678,32 +695,23 @@ class GenericDaemon(ThreadedServer):
             self.setServerValue('uptime', time.time())
             
             # Start the RPyC server (Triggers a blocking thread until it gets closed)
-            print('{} daemon started'.format(self.role.capitalize()))
+            print(f'{self.role.capitalize()} daemon started')
             self.start()
             
             # Halting the daemon: Check before this program closes -> Detect if the the daemon has properly 
             # halted before and custom shutdown procedures already been executed. If not, do so once more!
             if self.state != 'idle':
                 self._stopDaemon()
-            print('{} daemon stopped'.format(self.role.capitalize()))
+            print(f'{self.role.capitalize()} daemon stopped')
         except Exception as e:
             self.state = 'crashed'
-            self.logger.critical('Could not start free.dm {} daemon at {}:{}...({})'.format(self.role.capitalize(), self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'), self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'), e))
+            self.logger.critical('Could not start free.dm {} daemon at {}:{}...({})'.format(
+                self.role.capitalize(),
+                self.data.getConfig('daemon.rpc.address', 'daemon.rpc.address'),
+                self.data.getConfig('daemon.rpc.port', 'daemon.rpc.port'),
+                e
+                ))
             self.close()
-            
-    def handleEvent(self, event, *args, **kwargs):
-        '''
-        '''
-        # TODO: Implement an async method triggering direct daemon actions or invoking workers
-        # The events should be queued (one for the daemon or worker wise?) but executed asynchronously!
-        pass
-    
-    def emitEvent(self, event, callback):
-        '''
-        '''
-        # TODO: Implement an async method sending events. This should not be blocked by active workers or handling incoming events!
-        # The emitting of events should also work asynchronously to make sure we can execute the callback
-        pass
 
 
 # DAEMON HOWTO:

@@ -29,7 +29,6 @@ def run():
     runner = unittest.TextTestRunner()
     return runner.run(suite)
 
-
 # Main
 if __name__ == "__main__":
     run()

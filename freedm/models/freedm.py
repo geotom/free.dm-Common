@@ -39,9 +39,13 @@ master = {
 
 router = {
     'type': 'object',
-#            'properties': {
-#                           'address': {'type': 'string', 'description': 'The free.dm master address', 'default': 'master.free.dm'}
-#                           },
-#            'required': ['address'],
-#            'additionalProperties': False
+#     'properties': {
+#         'address': {
+#             'type': 'string',
+#             'description': 'The free.dm master address',
+#             'default': 'master.free.dm'
+#             }
+#         },
+#     'required': ['address'],
+#     'additionalProperties': False
     }

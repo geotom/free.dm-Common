@@ -6,8 +6,10 @@ This module provides filesystem related utility methods
 # Imports
 import os
 import time
+import logging
 from typing import Type, List, Union
 from contextlib import contextmanager
+from pathlib import Path
 try:
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEvent, FileSystemEventHandler, PatternMatchingEventHandler
@@ -36,10 +38,7 @@ class FilesystemObserver(object):
     logger      = None
     
     # Init
-    def __init__(self, path: str, filetypes: Union[str, List[str]]=None, handler: Type[FileSystemEventHandler]=None, recursive: bool=None):
-        # Imports
-        import logging
-        
+    def __init__(self, path: Union[str, Path], filetypes: Union[str, List[str]]=None, handler: Type[FileSystemEventHandler]=None, recursive: bool=None):
         # Get logger
         self.logger = logging.getLogger(str(os.getpid()))
         
@@ -47,7 +46,8 @@ class FilesystemObserver(object):
         if not os.path.exists(path):
             raise(f'(Path "{path}" does not exist)')
         else:
-            self._path = path
+            # Seems that the watchdog library requires a path in string format
+            self._path = str(path)
             
         # Set filetype attribute
         if filetypes is not None: 

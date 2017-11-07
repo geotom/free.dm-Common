@@ -594,7 +594,7 @@ class GenericDaemon(ThreadedServer):
             # Call the overriden function
             super()._accept_method(sock)
         
-    def _spawnDaemon(self):        
+    def _spawnDaemon(self):
         '''
         Spawns this daemon server instance listening to RPC requests
         '''

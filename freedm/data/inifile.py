@@ -9,8 +9,10 @@ import json
 from configparser import SafeConfigParser
 
 # free.dm Imports
-from freedm.data.objects import DataStore, DataObject
+from freedm.data.store import DataStore
+from freedm.data.object import DataObject
 from freedm.utils.filesystem import FilesystemObserver
+from freedm.utils.types import TypeChecker as checker
 from freedm.utils.async import runConcurrently
 
 
@@ -85,7 +87,6 @@ class IniFileStore(DataStore):
                     # Load new ddomain data object
                     if dest_type.endswith(store.filetype):
                         store.loadDomain(str(dest))
-                    
                     print('STORE DATA =', store._data)
             
             # Set the observer as handle and start
@@ -122,8 +123,9 @@ class IniFileStore(DataStore):
     # Implement domain loading and unloading
     def _loadDomain(self, domain, path):
         try:
+            assert path != None, 'No file location provided'
             # The backend file
-            inifile = os.path.join(path, f'{domain}.{self.filetype}')
+            inifile = path.joinpath(f'{domain}.{self.filetype}')
             
             # Read the data from file & convert values
             parser = SafeConfigParser()

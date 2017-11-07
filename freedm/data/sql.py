@@ -4,7 +4,8 @@ This module provides a DataStore based on a SQL database
 '''
 
 # free.dm Imports
-from freedm.data.objects import DataStore
+from freedm.data.store import DataStore
+from freedm.data.object import DataObject
 
 
 class SQLStore(DataStore):

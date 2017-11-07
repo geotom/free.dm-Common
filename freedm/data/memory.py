@@ -4,7 +4,8 @@ This module provides a DataStore based on in-memory dictionaries.
 '''
 
 # free.dm Imports
-from freedm.data.objects import DataStore, DataObject
+from freedm.data.store import DataStore
+from freedm.data.object import DataObject
 
 
 class MemoryStore(DataStore):

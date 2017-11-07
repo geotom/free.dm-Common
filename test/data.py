@@ -14,6 +14,9 @@ import logging
 import json
 from threading import Thread
 
+# Test imports
+import __init__
+
 # free.dm Imports
 import freedm.data as data
 import freedm.models as models

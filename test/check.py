@@ -8,6 +8,9 @@ import unittest
 import logging
 import sys
 
+# Test imports
+import __init__
+
 # free.dm Imports
 from freedm.utils.types import TypeChecker as checker
 
@@ -22,11 +25,11 @@ if not logger.hasHandlers():
 class TypeChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        logger.info('Starting unittest: {}'.format(cls.__name__))
+        logger.info(f'Starting unittest: {cls.__name__}')
     
     @classmethod   
     def tearDownClass(cls):
-        logger.info('Ending unittest: {}'.format(cls.__name__))
+        logger.info(f'Ending unittest: {cls.__name__}')
         
     def testAlphaStrings(self):
         tests = [
@@ -42,8 +45,8 @@ class TypeChecks(unittest.TestCase):
                  [{}, False],
                 ]
         for t in tests:
-            logger.debug('String "{}" is{}alphabetical'.format(t[0], ' ' if t[1] else ' not '))
+            logger.debug(f'String "{t[0]}" is{" " if t[1] else " not "}alphabetical')
             if t[1]:
-                self.assertTrue(checker.isAlpha(t[0]), 'Testing alphanumeric strings failed for "{}"'.format(t[0]))
+                self.assertTrue(checker.isAlpha(t[0]), f'Testing alphanumeric strings failed for "{t[0]}"')
             else:
-                self.assertFalse(checker.isAlpha(t[0]), 'Testing alphanumeric strings failed for "{}"'.format(t[0]))
+                self.assertFalse(checker.isAlpha(t[0]), f'Testing alphanumeric strings failed for "{t[0]}"')

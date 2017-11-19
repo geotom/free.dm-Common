@@ -63,7 +63,7 @@ class DataStore(object):
                 
     @property
     def filetype(self):
-        '''The filetype (ending .*) used by this store's filesystem based backends'''
+        '''The filetype (suffix .*) used by this store's filesystem based backends'''
         try:
             return self.__filetype
         except AttributeError:
@@ -153,7 +153,7 @@ class DataStore(object):
         :param str alias: An optional alphabetical alias without whitespace characters (Used instead of the name for setters/getters) 
         :param str description: The store description
         :param str path: An optional file system location (folder). Will otherwise be set by the data manager
-        :param str filetype: An optional file ending (.*) for file backends used by this store
+        :param str filetype: An optional file suffix (.*) for file backends used by this store
         :param bool writable: ``True`` if the store is writable
         :param bool persistent: ``True`` if the store should save its data persistently
         :param bool synced: ``True`` if the store should auto-load and auto-sync its backends

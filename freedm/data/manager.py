@@ -109,7 +109,7 @@ class DataManager(object):
         self.logger.debug(f'Using data storage location "{self.__path}"')
         
     # Representation
-    def __repr__(self) -> str:
+    def __repr__(self):
         return f'<{self.__class__.__name__}: {self.path}>'
                 
     # Auto-create Setters & Getters for each registered data store
@@ -175,7 +175,7 @@ class DataManager(object):
         :returns: A list of store instances
         :rtype: [py:class::freedm.data.objects.DataStore]
         '''
-        return [store for alias, store in self.stores]
+        return [store for _, store in self.stores]
     
     # DataStore registration
     def registerStore(self, store: Union[Dict[str, Any], Type[DataStore]]) -> bool:

@@ -7,10 +7,12 @@ This module defines a generic data store
 import os
 import logging
 import asyncio
+import uvloop
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import ItemsView, Optional, Union, List, Dict, Any, Type
+from typing import Optional, Union, Tuple, List, Dict, Any, Type
+from logging import Logger
 
 # free.dm Imports
 from freedm import models
@@ -29,12 +31,12 @@ class DataStore(object):
     loading, unloading and syncing its data objects.
     '''
     # Defaults
-    _default_name = 'data'
-    _default_filetype = 'cfg'
+    _default_name: str = 'data'
+    _default_filetype: str = 'cfg'
     
     # Sync strategy
-    _sync_parallel = True       # Data domains should be simultaneously synced => True or sequentially => False
-    _sync_max_threads = 10      # The max number of parallel sync operations/threads if parallel sync is enabled
+    _sync_parallel: bool = True       # Data domains should be simultaneously synced => True or sequentially => False
+    _sync_max_threads: int = 10      # The max number of parallel sync operations/threads if parallel sync is enabled
     
     @property
     def path(self) -> Optional[Path]:
@@ -62,40 +64,40 @@ class DataStore(object):
                 self.logger.critical(f'Cannot access provided storage path "{path}"')
                 
     @property
-    def filetype(self):
+    def filetype(self) -> str:
         '''The filetype (suffix .*) used by this store's filesystem based backends'''
         try:
             return self.__filetype
         except AttributeError:
             return self._default_filetype
     @filetype.setter
-    def filetype(self, extension):
+    def filetype(self, extension: str):
         if isinstance(extension, str):
             self.__filetype = extension[1:] if extension.startswith('.') else extension
             
     @property
-    def alias(self):
+    def alias(self) -> str:
         '''The optional alias of the data store. By default the alias is build from the store's name'''
         try:
             return self.__alias if self.__alias is not None else self.name.lower().capitalize()
         except AttributeError:
             return self.name.lower().capitalize()
     @alias.setter
-    def alias(self, name):
+    def alias(self, name: str):
         if isinstance(name, str) and name.isalpha():
             self.__alias = name.lower().capitalize()
         else:
             raise AttributeError(f'Invalid freedm.data.objects.DataStore alias "{name}". Must be an alphabetical string')
         
     @property
-    def name(self):
+    def name(self) -> str:
         '''The store's name. Used to derive the alias of the store if not set separately'''
         try:
             return self.__name if self.__name is not None else self._default_name
         except AttributeError:
             return self._default_name
     @name.setter
-    def name(self, name):
+    def name(self, name: str):
         if isinstance(name, str) and name.isalpha():
             self.__name = name
         else:
@@ -104,50 +106,50 @@ class DataStore(object):
     # Data persistence: Indicates that data of this store is read from/written to a filesystem or database backend
     _persistent = False
     @property
-    def persistent(self):
+    def persistent(self) -> bool:
         return self._persistent
     @persistent.setter
-    def persistent(self, mode):
+    def persistent(self, mode: bool):
         raise AttributeError('Set this attribute on instancing the store')
     
     # Data write mode: indicates that we can set/unset values. If a store is persistent, it means the store also must be writable
     _writable = True
     @property
-    def writable(self):
+    def writable(self) -> bool:
         return True if self.persistent else self._writable
     @writable.setter
-    def writable(self, mode):
+    def writable(self, mode: bool):
         raise AttributeError('Set this attribute on instancing the store')
     
     # Sync mode: Indicates that all data changes are immediately synchronized between backend and dataobject
     _synced = True
     @property
-    def synced(self):
+    def synced(self) -> bool:
         return self._synced
     @synced.setter
-    def synced(self, mode):
+    def synced(self, mode: bool):
         raise AttributeError('Set this attribute on instancing the store')
     
     @property
-    def logger(self):
+    def logger(self) -> Type[Logger]:
         '''The logger of this class'''
         return logging.getLogger(str(os.getpid()))
         
     # Store description
-    description = None
+    description: str = None
         
     # DataObject store
-    _data = {}
+    _data: Dict[str, Any] = {}
     
     # An optional IO handle for stores with filesystem backends or persistent socket connections
-    _iohandle = None
+    _iohandle: Dict[str, Any] = None
     
     # Representation
     def __repr__(self):
         return f'<{self.__class__.__name__}: {self.alias}>'
     
     # Init
-    def __init__(self, name=None, alias=None, description=None, path=None, filetype=None, writable=None, persistent=None, synced=False):
+    def __init__(self, name: str=None, alias: str=None, description: str=None, path: Union[str, Path]=None, filetype: str=None, writable: bool=None, persistent: bool=None, synced: bool=False):
         '''
         :param str name: An alphabetical name without whitespace characters (Used for setters/getters) 
         :param str alias: An optional alphabetical alias without whitespace characters (Used instead of the name for setters/getters) 
@@ -178,7 +180,7 @@ class DataStore(object):
             self.logger.warn(f'Persistent data store "{self.alias}" cannot save data (Configured as non writable)')
                 
     # Token dissection
-    def __tokenize(self, token):
+    def __tokenize(self, token: str) -> Tuple[Type[DataObject], str]:
         '''
         This method dissects a key token into its components representing the domain part and the data key.
         It maps the domain token to a loaded/auto-loaded DataObject (domain) if possible. If not, the returned
@@ -188,8 +190,8 @@ class DataStore(object):
         :rtype: [str/py:class::freedm.data.objects.DataObject]
         '''
         # Return objects
-        domain = None
-        tokens = None
+        domain: Type[DataObject] = None
+        tokens: str = None
          
         # Dissect
         try:
@@ -209,7 +211,7 @@ class DataStore(object):
         return domain, tokens
     
     # Filesystem handles
-    def releaseHandle(self):
+    def releaseHandle(self) -> None:
         '''
         Abstract method to close and release any open IO handle (filesystem/socket).
         Subclasses who open a file or socket should close them safely. On shutdown, 
@@ -241,11 +243,12 @@ class DataStore(object):
                 finally:
                     del self._iohandle
                     self._iohandle = None
+                    
         # Run concurrently
-        runConcurrently(domainReleaser, [domain for name, domain in self._data.items()])
+        runConcurrently(domainReleaser, [domain for _, domain in self._data.items()])
 
     # Value getting and setting
-    def setValue(self, token, value):
+    def setValue(self, token: str, value: Any) -> bool:
         '''
         Set the token's value in the DataObject after verifying the value against its schema definition 
         to insure we only set valid values. Otherwise we raise an ValueError exception.
@@ -316,7 +319,7 @@ class DataStore(object):
         # Return the result
         return True if result else False
         
-    def getValue(self, token, default=None):
+    def getValue(self, token: str, default: Any=None) -> Any:
         '''
         Looks up the token's value in the corresponding DataObject and verifies the value against its schema definition
         to insure we only return valid values. Otherwise we raise an ValueError exception.
@@ -329,7 +332,7 @@ class DataStore(object):
         self.logger.debug(f'Getting value "{token}" from data store "{self}"')
         
         # Set a default value
-        value = None
+        value: Any = None
         
         # Make sure token does not end with "[]"
         try:
@@ -392,7 +395,7 @@ class DataStore(object):
         # Return the value
         return value
     
-    def _setRaw(self, domain, token, value):
+    def _setRaw(self, domain: Type[DataObject], token: str, value: Any) -> None:
         '''
         Abstract method to store the raw value into a data objects.
         :param py:class::freedm.data.objects.DataObject domain: The domain data object
@@ -403,7 +406,7 @@ class DataStore(object):
         '''
         raise NotImplementedError(f'Abstract method _setRaw not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
             
-    def _getRaw(self, domain, token):
+    def _getRaw(self, domain: Type[DataObject], token: str) -> Any:
         '''
         Abstract method to retrieve the raw value from a DataObject.
         :param py:class::freedm.data.objects.DataObject domain: The domain data object
@@ -413,7 +416,7 @@ class DataStore(object):
         raise NotImplementedError(f'Abstract method _getRaw not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
             
     # Data backend loading        
-    def getDomain(self, domain):
+    def getDomain(self, domain: str) -> Optional[Type[DataObject]]:
         '''
         Returns the domain DataObject and tries to auto-load it if not yet done. Each subclass should define its own loading
         implementation as each domain DataStore type will access its data backend differently.
@@ -433,7 +436,7 @@ class DataStore(object):
                 self.logger.warn(f'Invalid data domain "{domain}". Must be a string')
                 return None
             
-    def loadDomain(self, domain):
+    def loadDomain(self, domain: str) -> Optional[Type[DataObject]]:
         '''
         Loads the domain related DataObject into this store and returns it
         :param str domain: The data domain
@@ -470,7 +473,7 @@ class DataStore(object):
             self.logger.warn(f'Failed to load data domain "{domain}" ({e})')
             return None
         
-    def unloadDomain(self, domain, sync=False):
+    def unloadDomain(self, domain: str, sync: bool=False) -> None:
         '''
         Unloads the domain related DataObject from this store and returns it
         :param str domain: The data domain
@@ -506,7 +509,7 @@ class DataStore(object):
         except Exception as e:
             self.logger.warn(f'Failed to unload data domain "{domain}" ({e})')
             
-    def sync(self, force=False):
+    def sync(self, force: bool=False) -> None:
         '''
         Syncs all domain related DataObjects of this store if writable and persistent.
         A store can implement two different sync strategies influenced by the store variable
@@ -539,6 +542,7 @@ class DataStore(object):
                     loop = asyncio.get_event_loop()
                 except RuntimeError:
                     loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
                     asyncio.set_event_loop(loop)
                 
                 # Get or create a queue
@@ -573,7 +577,7 @@ class DataStore(object):
                 self._data[domain].clearTainted()
             self.logger.warn(f'Store "{self}" cannot be synced ("{self}" is not persistent)')
     
-    def syncDomain(self, domain, force=False):
+    def syncDomain(self, domain: str, force: bool=False) -> None:
         '''
         Syncs the domain related DataObjects of this store. This will asynchronously sync
         all changes made to the DataObject to its backend. If a DataObject is already busy 
@@ -617,15 +621,15 @@ class DataStore(object):
             dataobject.clearTainted()
             self.logger.warn(f'Data domain "{domain}" cannot be synced ("{self}" is not persistent)')
             
-    def getSyncDomains(self):
+    def getSyncDomains(self) -> List[DataObject]:
         '''
         Returns all domain DataObjects which are tainted and need to be synced
         :returns: The list of DataObjects keys with changed data
-        :rtype: [str]
+        :rtype: [List]
         '''
         return [domain for domain in self._data if self._data[domain].tainted]
     
-    def getAllDomains(self):
+    def getAllDomains(self) -> List[str]:
         '''
         Returns all domain DataObjects of this store
         :returns: The list of all DataObjects keys
@@ -633,7 +637,7 @@ class DataStore(object):
         '''
         return list(self._data.keys())
             
-    def _loadDomain(self, domain, path):
+    def _loadDomain(self, domain: str, path: str) -> None:
         '''
         Abstract method to load the domain related data backend as a DataObject.
         :param str domain: The data domain
@@ -643,7 +647,7 @@ class DataStore(object):
         '''
         raise NotImplementedError(f'Abstract method _loadDomain not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
         
-    def _unloadDomain(self, domain, path):
+    def _unloadDomain(self, domain: str, path: str) -> None:
         '''
         Abstract method to unload the domain related data backend.
         :param py:class::freedm.data.objects.DataObject domain: The data domain object
@@ -651,7 +655,7 @@ class DataStore(object):
         '''
         raise NotImplementedError(f'Abstract method _unloadDomain not implemented in class "{self.__class__.__module__}.{self.__class__.__name__}"')
         
-    def _syncDomain(self, domain, path):
+    def _syncDomain(self, domain: Type[DataObject], path: str) -> None:
         '''
         A basic sync method using the store's :function:_setRaw: to write back changed data 
         token by token to its related backend. You might want to override this sync method 

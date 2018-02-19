@@ -5,6 +5,7 @@ This module provides concurrency related utility methods based on asyncio
 
 # Imports
 import asyncio
+import uvloop
 from typing import List, Any, Callable, Coroutine, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
@@ -30,6 +31,7 @@ def runConcurrently(function: Callable, tasks: List[Any], *args, max_threads: in
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
             asyncio.set_event_loop(loop)
                 
         # Create a worker pool for each "task" in the list (which are to be executed parallel        

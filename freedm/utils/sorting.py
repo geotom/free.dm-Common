@@ -5,7 +5,7 @@ General utilities to sort data structures
 
 # Imports
 from functools import reduce
-from typing import Dict, Set, Text
+from typing import Dict, Set, Text, List
 
 
 # Types
@@ -49,10 +49,11 @@ def topologicalSorter(data: Dict[Module, Dependency]) -> List[Module]:
                 break
             yield ' '.join(sorted(ordered))
             data = {item: (dep - ordered) for item,dep in data.items() if item not in ordered}
-        try:
-            assert not data, f'A cyclic dependency exists amongst {data}'
-        except AssertionError as e:
-            raise CyclicReference(e)
+        
+        # Check: If data is not empty by now, we have a cyclic dependency
+        if data:
+            raise CyclicReference(f'A cyclic dependency exists amongst {data}')
         
     graph = ' '.join([i for i in sort(data)]).split(' ')
+    
     return [g for g in graph if g in data]

@@ -123,7 +123,9 @@ class IniFileStore(DataStore):
     # Implement domain loading and unloading
     def _loadDomain(self, domain, path):
         try:
-            assert path != None, 'No file location provided'
+            # Check that we have a FS path for the INI file
+            if not path: raise UserWarning(f'No INI file location provided!')
+            
             # The backend file
             inifile = path.joinpath(f'{domain}.{self.filetype}')
             

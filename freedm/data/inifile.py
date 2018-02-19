@@ -7,6 +7,8 @@ This module provides a DataStore based on INI-files
 import os
 import json
 from configparser import SafeConfigParser
+from pathlib import Path
+from typing import Union, Any, Type
 
 # free.dm Imports
 from freedm.data.store import DataStore
@@ -28,14 +30,14 @@ class IniFileStore(DataStore):
     file backend in sync at all time making manual syncs unnecessary.
     '''
     # Attributes 
-    _persistent = True
-    _writable = True
-    _default_name = 'Config'
-    _default_filetype = 'ini'
-    description = 'A persistent INI file store'
+    _persistent: bool = True
+    _writable: bool = True
+    _default_name: str = 'Config'
+    _default_filetype: str = 'ini'
+    description: str = 'A persistent INI file store'
                 
     @DataStore.path.setter
-    def path(self, path):
+    def path(self, path: Union[str, Path]):
         # First, set the path
         DataStore.path.__set__(self, path)
         
@@ -47,7 +49,7 @@ class IniFileStore(DataStore):
             self.__loadFiles()
             
     # Private method to load all backend files
-    def __loadFiles(self):
+    def __loadFiles(self) -> None:
         # Gather INI files to load
         files = []
         for file in os.listdir(self.path):
@@ -58,7 +60,7 @@ class IniFileStore(DataStore):
         runConcurrently(self.loadDomain, files)
         
     # Private method to setup path observer
-    def __observeFiles(self):
+    def __observeFiles(self) -> None:
         try:
             # Create a subclass implementing the FilesystemObserver's abstract event methods
             class Observer(FilesystemObserver):
@@ -98,7 +100,7 @@ class IniFileStore(DataStore):
             self.logger.warn(f'Cannot observe path ({e})')
             
     # Release the directory observer
-    def releaseHandle(self):
+    def releaseHandle(self) -> None:
         if self._iohandle is not None:
             try:
                 self._iohandle.stop()
@@ -109,7 +111,7 @@ class IniFileStore(DataStore):
                 raise e
             
     # Implement data setters & getter
-    def _setRaw(self, domain, token, value):
+    def _setRaw(self, domain: Type[DataObject], token: str, value: Any) -> None:
         # TODO: Implement sill
 #         if self.synced and self._iohandle:
 #             with self._iohandle._watchdog.interruptObserver():
@@ -117,13 +119,15 @@ class IniFileStore(DataStore):
                     pass
                     #f.write('TODO: INIFILE DATA')
     
-    def _getRaw(self, domain, token):
+    def _getRaw(self, domain: Type[DataObject], token: str) -> Any:
         print('## GETTNG R-A-W !!!', token)
     
     # Implement domain loading and unloading
-    def _loadDomain(self, domain, path):
+    def _loadDomain(self, domain: str, path: str) -> None:
         try:
-            assert path != None, 'No file location provided'
+            # Check that we have a FS path for the INI file
+            if not path: raise UserWarning(f'No INI file location provided!')
+            
             # The backend file
             inifile = path.joinpath(f'{domain}.{self.filetype}')
             
@@ -176,8 +180,8 @@ class IniFileStore(DataStore):
         except Exception as e:
             raise e
         
-    def _unloadDomain(self, domain, path):
+    def _unloadDomain(self, domain: str, path: str) -> None:
         pass
     
-    def _syncDomain(self, domain, path):
+    def _syncDomain(self, domain: Type[DataObject], path: str) -> None:
         print('TODO: Implement or get rid of this _syncDomain method')

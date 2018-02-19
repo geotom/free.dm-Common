@@ -27,13 +27,13 @@ class SQLStore(DataStore):
     notified when changes are written to the database.
     '''
     # Attributes
-    _persistent = True
-    _writable = True
-    _default_name = 'pgSQL'
-    description = 'A persistent PostgreSQL database store'
+    _persistent: bool = True
+    _writable: bool = True
+    _default_name: str = 'pgSQL'
+    description: str = 'A persistent PostgreSQL database store'
     
     # Set up a file monitoring observer
-    def __init__(self, *args, address=None, port=None, user=None, password=None, **kwargs):
+    def __init__(self, *args, address: str=None, port: int=None, user: str=None, password: str=None, **kwargs):
         '''
         Creates a new instance of a INI file based data store. This class supports
         a default dynamic reading/writing of INI files or keeping the datastore with its
@@ -53,7 +53,7 @@ class SQLStore(DataStore):
         if self.synced:
             self.__connect()
             
-    def __connect(self):
+    def __connect(self) -> None:
         '''
         Opens the database and sets the fshandle
         '''

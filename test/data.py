@@ -618,7 +618,7 @@ class DataManager(unittest.TestCase):
 
     def testPathLocation(self):
         self.assertTrue(os.path.exists(self.testpath), 'Data manager path "{}" does not exist'.format(self.testpath))
-        self.assertEqual(self.testpath, self.manager.path, 'Data manager path "{}" does not equal correct path "{}"'.format(self.manager.path, self.testpath))
+        self.assertEqual(self.testpath, str(self.manager.path), 'Data manager path "{}" does not equal correct path "{}"'.format(self.manager.path, self.testpath))
         
     def testStoreRegistration(self):
         # Create store

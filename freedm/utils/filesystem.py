@@ -14,7 +14,8 @@ try:
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEvent, FileSystemEventHandler, PatternMatchingEventHandler
 except ImportError as e:
-    print(f'Missing dependency ({e}): Please install via "pip install watchdog"')
+    from freedm.utils.exceptions import freedmModuleImport
+    raise freedmModuleImport(e)
 
 
 class FilesystemObserver(object):

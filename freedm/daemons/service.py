@@ -6,15 +6,18 @@ The generic service class exposing API methods for all daemons
 # Imports
 import time, uuid
 from datetime import timedelta
+from typing import Dict
 
 # RPyC imports
 try:
     from rpyc import Service
 except ImportError as e:
-    print(f'Missing dependency ({e}): Please install via "pip install rpyc"')
+    from freedm.utils.exceptions import freedmModuleImport
+    raise freedmModuleImport(e)
 
 # free.dm Imports
 from freedm.utils.types import TypeChecker as checker
+
 
 class ClientService(Service):
     '''
@@ -51,6 +54,7 @@ class ClientService(Service):
         '''
         import sys
         sys.exit()
+
     
 class DaemonService(Service):
     '''
@@ -128,7 +132,7 @@ class DaemonService(Service):
             elif self.daemon.state == 'idle' or self.daemon.state == 'crashed':
                 break
     
-    def exposed_getDaemonUptime(self):
+    def exposed_getDaemonUptime(self) -> str:
         ''' 
         Returns the uptime of this daemon instance as formated string
         :return: The daemon uptime
@@ -168,7 +172,7 @@ class DaemonService(Service):
         else:
             return {}
     
-    def exposed_getSystemInfo(self):
+    def exposed_getSystemInfo(self) -> Dict:
         ''' 
         Returns a dictionary with gathered daemon data & system info
         :return: The daemon data & system info
@@ -187,6 +191,7 @@ class DaemonService(Service):
             daemon_uptime   = self.exposed_getDaemonUptime(),
             sessions        = []
             ))
+        
         # Get a list of RPC sessions
         for c in self.daemon._getRpcConnections():
             if c != self._conn:
@@ -198,6 +203,13 @@ class DaemonService(Service):
                         ))
                 except:
                     pass
+                
+        # Get the user & security context
+        info.update({'user': freedm.utils.system.getUserInfo()})
+        
+        from freedm.utils.formatters import printPrettyDict
+        printPrettyDict(info)
+        
         return info
     
     def exposed_keepalive(self):

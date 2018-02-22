@@ -15,7 +15,8 @@ try:
     from rpyc.utils.registry import UDPRegistryClient
     from rpyc.utils.authenticators import AuthenticationError
 except ImportError as e:
-    print('Missing dependency ({}): Please install via "pip install rpyc"'.format(e))
+    from freedm.utils.exceptions import freedmModuleImport
+    raise freedmModuleImport(e)
 
 @asyncio.coroutine
 def registerPeriodically(function, interval):

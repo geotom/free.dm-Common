@@ -10,7 +10,8 @@ import argparse
 try:
     import psutil
 except ImportError as e:
-    print(f'Missing dependency ({e}): Please install via "pip install psutil"')
+    from freedm.utils.exceptions import freedmModuleImport
+    raise freedmModuleImport(e)
 from threading import Thread
 from typing import Dict, List
 
@@ -19,7 +20,8 @@ try:
     from rpyc.utils.server import ThreadPoolServer, ThreadedServer
     from rpyc.utils.authenticators import AuthenticationError
 except ImportError as e:
-    print(f'Missing dependency ({e}): Please install via "pip install rpyc"')
+    from freedm.utils.exceptions import freedmModuleImport
+    raise freedmModuleImport(e)
 
 # free.dm Imports
 from freedm.utils import logger as L
@@ -29,6 +31,7 @@ from freedm.utils.types import TypeChecker as checker
 from freedm.utils.exceptions import ExceptionHandler
 from freedm.daemons.client import DaemonClient
 from freedm.daemons.service import DaemonService
+
 
 class GenericDaemon(ThreadedServer):
     '''
@@ -377,6 +380,11 @@ class GenericDaemon(ThreadedServer):
         # Set logger & data manager
         self.logger = logger
         self.data = G.DATA
+        
+        import os
+        print('Servus')
+        self.logger.warn('SERVUS (' + os.path.abspath(os.path.curdir) + ')')
+        
         
         # Add the daemon's configuration store to data manager
         self.data.registerStore(

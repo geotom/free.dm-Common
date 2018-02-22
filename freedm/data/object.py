@@ -356,7 +356,7 @@ class DataObject(dict):
                             # Fill list with empty values if it is too short
                             key = int(key)
                             if len(data) <= key:
-                                for empty in range(len(data), key + 1):
+                                for _ in range(len(data), key + 1):
                                     data.append(None)
                             # Add the value at the correct index
                             if isinstance(data[key], list) and isinstance(new_value, dict):

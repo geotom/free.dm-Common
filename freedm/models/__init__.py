@@ -12,7 +12,8 @@ try:
     from jsonschema import validate
     from jsonschema.exceptions import ValidationError, SchemaError
 except ImportError as e:
-    print(f'Missing dependency ({e}): Please install via "pip install jsonschema"')
+    from freedm.utils.exceptions import freedmModuleImport
+    raise freedmModuleImport(e)
 
 # free.dm Imports
 from freedm.utils.formatters import ellipsis

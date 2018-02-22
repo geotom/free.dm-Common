@@ -10,6 +10,13 @@ DaemonInfo = '''{{role}} daemon ({{pid}}) running at <{{address}}:{{port}}>
    Uptime:\t\tDaemon:  {{daemon_uptime}}
    \t\t\tSystem:  {{system_uptime}}
 
+Environment
+    User:\t\t{{process['user']}} (UID={{process['uid']}})
+    Group:\t\t{{process['group']}} (GID={{process['gid']}})
+    Script:\t\t{{process['script']}}
+    Working directory:\t{{process['directory']}}
+    Umask:\t\t
+
 System status
    Linux:\t\t{{os}}
    Platform:\t\t{{platform}}

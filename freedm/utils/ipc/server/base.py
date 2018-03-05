@@ -21,10 +21,10 @@ except ImportError as e:
     raise freedmModuleImport(e)
 
 
-I = TypeVar('I', bound='IPCServer')
+IS = TypeVar('IS', bound='IPCSocketServer')
 
 
-class IPCServer(object):
+class IPCSocketServer(object):
     '''
     A generic server implementation for IPC servers allowing to communicate with connected clients
     while keeping a list of active connections. It can be used as a contexmanager or as asyncio awaitable.
@@ -37,7 +37,7 @@ class IPCServer(object):
     '''
     
     # The context (This server)
-    _context: I=None
+    _context: IS=None
     
     # A register for active client connections
     _connection_pool: ConnectionPool=None
@@ -61,7 +61,7 @@ class IPCServer(object):
         if checker.isInteger(max_connections):
             self._connection_pool.max = max_connections
         
-    async def __aenter__(self) -> I:
+    async def __aenter__(self) -> IS:
         '''
         A template function that should be implemented by any subclass
         '''
@@ -74,7 +74,7 @@ class IPCServer(object):
         for c in self._connection_pool:
             c.cancel()
         
-    async def __await__(self) -> I:
+    async def __await__(self) -> IS:
         '''
         Makes this class awaitable
         '''

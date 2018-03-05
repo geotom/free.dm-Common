@@ -14,17 +14,17 @@ try:
     from typing import Union, Type, Optional, TypeVar
     
     # free.dm Imports
-    from freedm.utils.ipc.server.base import IPCServer, freedmIPCSocketCreation
+    from freedm.utils.ipc.server.base import IPCSocketServer, freedmIPCSocketCreation
     from freedm.utils.ipc.connection import Connection, ConnectionType
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-U = TypeVar('U', bound='UXDSocketServer')
+US = TypeVar('US', bound='UXDSocketServer')
 
 
-class UXDSocketServer(IPCServer):
+class UXDSocketServer(IPCSocketServer):
     '''
     An IPC Server using Unix Domain sockets implemented as async contextmanager.
     This server keeps track 
@@ -43,7 +43,7 @@ class UXDSocketServer(IPCServer):
         super(self.__class__, self).__init__(loop, limit, chunksize, max_connections, mode)
         self.path = path
 
-    async def __aenter__(self) -> U:
+    async def __aenter__(self) -> US:
         # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
         if not self.path:
             raise freedmIPCSocketCreation(f'Cannot create UXD socket (No socket file provided)')

@@ -10,14 +10,14 @@ try:
     from typing import TypeVar
     
     # free.dm Imports
-    from freedm.utils.ipc.server.base import IPCServer, freedmIPCSocketCreation
+    from freedm.utils.ipc.server.base import IPCSocketServer, freedmIPCSocketCreation
     from freedm.utils.ipc.connection import Connection, ConnectionType
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-T = TypeVar('T', bound='TCPSocketServer')
+TS = TypeVar('TS', bound='TCPSocketServer')
 
 
 class TCPSocketServer(object):

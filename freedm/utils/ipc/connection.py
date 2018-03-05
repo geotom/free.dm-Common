@@ -29,7 +29,7 @@ class ConnectionPool(set):
         return self._max
     @max.setter
     def max(self, amount: int):
-        if max > len(self):
+        if amount > len(self):
             self._max = amount
         else:
             raise freedmConnectionPoolMax()
@@ -38,7 +38,7 @@ class ConnectionPool(set):
         '''
         Returns if this connection pool can still accept new connections
         '''
-        return False if not self.max else self.max > len(self)
+        return False if not self.max else self.max <= len(self)
     
     def getConnections(self) -> List[Type[C]]:
         '''
@@ -78,8 +78,8 @@ class ConnectionPool(set):
                 
                 
 class ConnectionType(Enum):
-    TEXT_DATA = 1
-    STREAM_DATA = 2
+    EPHEMERAL  = 1
+    PERSISTENT = 2
 
 
 Connection = namedtuple('Connection', 

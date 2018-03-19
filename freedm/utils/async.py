@@ -45,7 +45,7 @@ def getLoop(policy: Optional[Type[asyncio.AbstractEventLoopPolicy]]=None) -> asy
         raise freedmAsyncLoopCreation(e)
     finally:
         def handle_exception(loop, context):
-            raise freedmAsyncLoopException(context['exception'])
+            raise freedmAsyncLoopException(context.get('exception') or context.get('message'))
         if not loop.get_exception_handler():
             loop.set_exception_handler(handle_exception)
         return loop
@@ -63,7 +63,7 @@ class freedmAsyncLoopException(freedmBaseException):
     Gets thrown when we catch an exception in the loop
     '''
     def template(self, error):
-        return f'Caught async loop exception "{error.__class__.__name__}" ({error})'
+        return f'Caught async loop exception "{error.__class__.__name__ if not isinstance(error, str) else error}" ({error})'
 
 
 def runConcurrently(function: Callable, tasks: Iterable[Any], *args, max_threads: int=None, timeout: int=None) -> None:

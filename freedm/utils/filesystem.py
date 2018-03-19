@@ -131,7 +131,7 @@ class FilesystemObserver(object):
             self._watchdog = None
         
     # Abstract file event handlers
-    def onFileModified(self, event: Type[FileSystemEvent]) -> None:
+    def onFileModified(self, event: FileSystemEvent) -> None:
         '''
         Abstract method executed when a file is modified
         :param watchdog.events.FileModifiedEvent event: The filesystem event
@@ -141,7 +141,7 @@ class FilesystemObserver(object):
         else:
             self.logger.info(f'File "{event.src_path}" modified')
             
-    def onFileCreated(self, event: Type[FileSystemEvent]) -> None:
+    def onFileCreated(self, event: FileSystemEvent) -> None:
         '''
         Abstract method executed when a file is created
         :param watchdog.events.FileCreatedEvent event: The filesystem event
@@ -151,7 +151,7 @@ class FilesystemObserver(object):
         else:
             self.logger.info(f'File "{event.src_path}" created')
             
-    def onFileDeleted(self, event: Type[FileSystemEvent]) -> None:
+    def onFileDeleted(self, event: FileSystemEvent) -> None:
         '''
         Abstract method executed when a file is deleted
         :param watchdog.events.FileDeletedEvent event: The filesystem event
@@ -161,7 +161,7 @@ class FilesystemObserver(object):
         else:
             self.logger.info(f'File "{event.src_path}" deleted')
             
-    def onFileMoved(self, event: Type[FileSystemEvent]) -> None:
+    def onFileMoved(self, event: FileSystemEvent) -> None:
         '''
         Abstract method executed when a file is moved
         :param watchdog.events.FileMovedEvent event: The filesystem event

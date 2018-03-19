@@ -10,7 +10,8 @@ try:
     from typing import TypeVar
     
     # free.dm Imports
-    from freedm.utils.ipc.server.base import IPCSocketServer, freedmIPCSocketCreation
+    from freedm.utils.ipc.server.base import IPCSocketServer
+    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation
     from freedm.utils.ipc.connection import Connection, ConnectionType
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport

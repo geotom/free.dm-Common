@@ -40,37 +40,37 @@ class ConnectionPool(set):
         '''
         return False if not self.max else self.max <= len(self)
     
-    def getConnections(self) -> List[Type[C]]:
+    def getConnections(self) -> List[C]:
         '''
         Return active connections
         '''
         return [c._coro.cr_frame.f_locals['connection'] for c in self]
     
-    def getConnectionsByAddress(self, address: str) -> List[Type[C]]:
+    def getConnectionsByAddress(self, address: str) -> List[C]:
         '''
         Return active connections from the specified address
         '''
         return [c._coro.cr_frame.f_locals['connection'] for c in self if c.client_address == address]
     
-    def getConnectionsByUser(self, uid: int) -> List[Type[C]]:
+    def getConnectionsByUser(self, uid: int) -> List[C]:
         '''
         Return active connections from the specified user ID
         '''
         return [c._coro.cr_frame.f_locals['connection'] for c in self if c.uid == uid]
     
-    def getConnectionsByGroup(self, gid: int) -> List[Type[C]]:
+    def getConnectionsByGroup(self, gid: int) -> List[C]:
         '''
         Return active connections from the specified group ID
         '''
         return [c._coro.cr_frame.f_locals['connection'] for c in self if c.gid == gid]
     
-    def getConnectionsByProcess(self, pid: int) -> List[Type[C]]:
+    def getConnectionsByProcess(self, pid: int) -> List[C]:
         '''
         Return active connections from the specified process ID
         '''
         return [c._coro.cr_frame.f_locals['connection'] for c in self if c.pid == pid]
 
-    def getIdleConnectionsSince(self, period: int) -> List[Type[C]]:
+    def getIdleConnectionsSince(self, period: int) -> List[C]:
         '''
         Return active connections idling longer then the specified period in seconds
         '''
@@ -87,7 +87,7 @@ Connection = namedtuple('Connection',
     socket
     pid
     uid
-    gis
+    gid
     client_address
     server_address
     reader

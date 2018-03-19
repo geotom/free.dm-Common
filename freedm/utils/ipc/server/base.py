@@ -11,11 +11,13 @@ try:
     from typing import Union, Type, Optional, Set, TypeVar, Iterable
     
     # free.dm Imports
+    from freedm.utils import logging
     from freedm.utils.async import getLoop
     from freedm.utils.types import TypeChecker as checker
-    from freedm.utils.exceptions import freedmBaseException
     from freedm.utils.ipc.message import Message
+    from freedm.utils.ipc.protocol import Protocol
     from freedm.utils.ipc.connection import Connection, ConnectionType, ConnectionPool
+    from freedm.utils.ipc.exceptions import freedmIPCMessageReader, freedmIPCMessageHandler, freedmIPCMessageLimitOverrun, freedmIPCMessageWriter
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
@@ -27,7 +29,7 @@ IS = TypeVar('IS', bound='IPCSocketServer')
 class IPCSocketServer(object):
     '''
     A generic server implementation for IPC servers allowing to communicate with connected clients
-    while keeping a list of active connections. It can be used as a contexmanager or as asyncio awaitable.
+    while keeping a list of active connections. It can be used as a contextmanager or as asyncio awaitable.
     This IPC server provides basic functionality for receiving and sending messages and supports:
     - Ephemeral and persistent (long-living) connections
     - Setting a maximum connection limit
@@ -48,13 +50,16 @@ class IPCSocketServer(object):
             limit: Optional[int]=None,
             chunksize: Optional[int]=None,
             max_connections: Optional[int]=None,
-            mode: Optional[Union[ConnectionType]]=None
+            mode: Optional[ConnectionType]=None,
+            protocol: Optional[Protocol]=None
             ) -> None:
         
+        self.logger = logging.getLogger()
         self.loop = loop or getLoop()
         self.limit = limit
         self.chunksize = chunksize
         self.mode = mode
+        self.protocol = protocol
         
         if not self._connection_pool:
             self._connection_pool = ConnectionPool()
@@ -80,7 +85,7 @@ class IPCSocketServer(object):
         '''
         return await self.__aenter__()
     
-    def _assembleConnection(self, reader: Type[asyncio.StreamReader], writer: Type[asyncio.StreamWriter]) -> Optional[Connection]:
+    def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         '''
         Assemble a connection object based on the info we get from the reader/writer
         '''
@@ -88,7 +93,7 @@ class IPCSocketServer(object):
             socket=writer.get_extra_info('socket'),
             pid=None,
             uid=None,
-            gis=None,
+            gid=None,
             client_address=None,
             server_address=None,
             reader=reader,
@@ -100,7 +105,7 @@ class IPCSocketServer(object):
                 }
             )
     
-    def _onConnectionEstablished(self, reader: Type[asyncio.StreamReader], writer: Type[asyncio.StreamWriter]) -> asyncio.Task:
+    def _onConnectionEstablished(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> asyncio.Task:
         '''
         Responsible for the creation and recycling of connections for any new established session
         and subsequently hands over the further session handling
@@ -121,26 +126,25 @@ class IPCSocketServer(object):
         '''
         A template function for rejecting a connection attempt
         '''
-        print(f'-> Rejecting connection ({reason})')
+        self.logger.debug(f'-> Rejecting connection ({reason})')
         if reason: await self.sendMessage(reason, connection)
         await self.closeConnection(connection)
         
-    
     async def closeConnection(self, connection):
         '''
-        End and close an existing connection
+        End and close an existing connection:
+        Acknowledge or inform client about EOF, then close
         '''
-        # Acknowledge or inform client about EOF, then close
         if not connection.writer.transport.is_closing():
             if connection.reader.at_eof():
-                print('CLOSING BY Client')
+                self.logger.debug('IPC connection closed by client')
                 connection.reader.feed_eof()
             else:
-                print('CLOSING BY SERVER')
+                self.logger.debug('IPC connection closed by server')
                 if connection.writer.can_write_eof(): connection.writer.write_eof()
             await asyncio.sleep(.1)
             connection.writer.close()
-            print('WRITER CLOSED!!!')
+            self.logger.debug('IPC connection writer closed')
     
     async def handleConnection(self, connection: Connection) -> None:
         '''
@@ -149,7 +153,7 @@ class IPCSocketServer(object):
         # Authenticate
         auth = await self.authenticateConnection(connection)
         if auth:
-            print('-> Connection was successfully authenticated')
+            self.logger.debug('IPC connection was successfully authenticated')
         else:
             await self.rejectConnection(connection, 'Could not authenticate')
             return
@@ -157,6 +161,8 @@ class IPCSocketServer(object):
         # Read data depending on the connection type and handle it
         chunks = 0
         while not connection.reader.at_eof():
+            # Update the connection
+            connection.state['update'] = time.time()
             # Read up to the limit or as many chunks until the limit
             try:
                 if self.chunksize:
@@ -166,6 +172,8 @@ class IPCSocketServer(object):
                     chunks += 1
                 else:
                     raw = await connection.reader.read(self.limit or -1)
+            except asyncio.CancelledError:
+                return
             except Exception as e:
                 raise freedmIPCMessageReader(e)
             # Handle the received message or message fragment
@@ -179,10 +187,10 @@ class IPCSocketServer(object):
                 except Exception as e:
                     raise freedmIPCMessageHandler(e)
         
-        # Close the connection (It will be automatically removed rom the pool)
+        # Close the connection (It will be automatically removed from the pool)
         await self.closeConnection(connection)
             
-    async def authenticateConnection(self, connection: Type[Connection]) -> bool:
+    async def authenticateConnection(self, connection: Connection) -> bool:
         '''
         A template function that should be overwritten by any subclass if required
         '''
@@ -192,10 +200,10 @@ class IPCSocketServer(object):
         '''
         A template function that should be overwritten by any subclass if required
         '''
-        print('Received:', message.data.decode())
+        self.logger.debug(f'IPC server received: {message.data.decode()}')
         await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)
         
-    async def sendMessage(self, message: Union[str, int, float], connection: Union[Type[Connection], Iterable[Type[Connection]]]=None) -> None:
+    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None) -> None:
         '''
         Send a message to either one or more connections
         '''
@@ -222,38 +230,3 @@ class IPCSocketServer(object):
         Shutdown this server
         '''
         await self.__aexit__()
-
-
-class freedmIPCSocketCreation(freedmBaseException):
-    '''
-    Gets thrown when the IPC socket module cannot create a socket
-    '''
-    template = 'Cannot create IPC socket ({error})'
-    
-
-class freedmIPCMessageWriter(freedmBaseException):
-    '''
-    Gets thrown when the IPC socket module cannot send a message
-    '''
-    template = 'Cannot write message to IPC socket ({error})'
-    
-
-class freedmIPCMessageReader(freedmBaseException):
-    '''
-    Gets thrown when the IPC socket module cannot read and message
-    '''
-    template = 'Cannot read message from IPC socket ({error})'
-    
-    
-class freedmIPCMessageHandler(freedmBaseException):
-    '''
-    Gets thrown when the IPC message handler creates an exception
-    '''
-    template = 'IPC Message handler failed ({error})'
-    
-    
-class freedmIPCMessageLimitOverrun(freedmBaseException):
-    '''
-    Gets thrown when the IPC socket receives/sends a message exceeding the limit set
-    '''
-    template = 'IPC Message length exceeds limit set ({error})'

@@ -9,11 +9,18 @@ import platform
 from typing import Union, Callable, Type
 
 
+# free.dm Imports
+from . import logging
+
+
+# Create logger
+logger = None
+
+
 class ExceptionHandler(object):
     '''
     A custom Exception handler defining a method to react on errors
     '''
-    # Init
     def __init__(self, handler: str):
         try:
             method = getattr(self.__class__, f'{handler}Handler')
@@ -40,37 +47,39 @@ class ExceptionHandler(object):
 
 class freedmBaseException(Exception):
     '''
-    The base class for all freedm module exceptions. A free
+    The base class for all freedm module exceptions.
     '''
-    
     # A template string or function for string representations of this exception
     template: Union[str, Callable] = None
     
     # A flag causing the program to halt when fatal is True
     fatal: bool = False
     
-    # Prefix
-    prefix: str = 'free.dm:'
-    
+    # Logger
+    logger = None
+        
     def __init__(self, error) -> None:
         super().__init__(error)
         
-        # Print a message
-        if isinstance(self.template, str):
-            print(self.prefix, self.template.format(error=error))
-        elif hasattr(self.template, '__call__'):
-            print(self.prefix, self.template(error))
-            
-        # Is this a fatal exception?
-        if self.fatal is True:
-            sys.exit()
+        if not logger: self.logger = logging.getLogger()
+        
+        try:
+            # Log message
+            if isinstance(self.template, str):
+                self.logger.error(self.template.format(error=error), exc_info=self.logger.level == logging.DEBUG)
+            elif hasattr(self.template, '__call__'):
+                self.logger.error(self.template(error), exc_info=self.logger.level == logging.DEBUG)
+        except Exception as e:
+            self.logger.error(f'Error when handling free.dm exception "{error.__class__.__name__}" ({e})')
+        finally:
+            # Is this a fatal exception?
+            if self.fatal is True: sys.exit()
 
 
 class freedmUnsupportedOS(freedmBaseException):
     '''
     Gets thrown when the current OS is not supported
     '''
-    
     def template(self, error: Type[Exception]) -> str:
         if error.name:
             return f'Module "{error.name}" not supported on current Operating System "{platform.system()}"'
@@ -82,10 +91,9 @@ class freedmModuleImport(freedmBaseException):
     '''
     Gets thrown when a Python module cannot be imported
     '''
-    def __init__(self, error) -> None:
-        super().__init__(error)
+    fatal = True
+    def template(self, error: Type[Exception]) -> str:
         if error.name:
-            print(f'Missing module dependency ({error.name}): Please install via "pip install {error.name}"\nExiting...')
+            return(f'Missing module dependency ({error.name}): Please install via "pip install {error.name}"')
         else:
-            print(f'Missing module dependency ({error})\nExiting...')
-        sys.exit()
+            return(f'Missing module dependency ({error})')

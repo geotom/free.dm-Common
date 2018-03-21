@@ -12,6 +12,9 @@ from typing import Type, Optional, Union
 from . import globals as G
 
 
+# Set logging module 
+logging = logging
+
 # Constants
 CRITICAL = logging.CRITICAL
 FATAL = logging.CRITICAL

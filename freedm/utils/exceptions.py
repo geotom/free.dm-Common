@@ -6,43 +6,77 @@ A utility class for exception handling.
 # Imports
 import sys
 import platform
-from typing import Union, Callable, Type
-
+import traceback
+from typing import Union, Callable, Type, Optional
 
 # free.dm Imports
 from . import logging
-
-
-# Create logger
-logger = None
 
 
 class ExceptionHandler(object):
     '''
     A custom Exception handler defining a method to react on errors
     '''
-    def __init__(self, handler: str):
+    # Logger
+    logger = None
+    
+    def __init__(self, handler: Optional[str]=None, logger: Optional[Type[logging.logging.Logger]]=None):
+        # Set a logger
+        ExceptionHandler.logger = logger or logging.getLogger()
+        # Get correct exception handler
         try:
-            method = getattr(self.__class__, f'{handler}Handler')
-            if hasattr(method, '__call__'):
-                sys.excepthook = method
+            if not handler: handler = 'default'
+            method = getattr(self.__class__, f'{handler.lower()}Handler')
+            if not hasattr(method, '__call__'):
+                method = self.defaultHandler
+        except AttributeError:
+            logger.error(f'Exception handler "{handler}" is not implemented')
+            method = self.defaultHandler
+        except Exception as e:
+            logger.error(f'Cannot setup exception handler "{handler}" ({e})')
+            method = self.defaultHandler
+        # Finally set this as global exception handler
+        finally:
+            def exception_handler(error_type, error, error_trace):
+                try:
+                    method(error_type, error, error_trace)
+                except Exception as e:
+                    ExceptionHandler.logger.error(f'Cannot handle exception ({e})', exc_info=False)
+                finally:
+                    # Is this a fatal exception?
+                    try:
+                        fatal = error.fatal
+                    except:
+                        fatal = False
+                    if fatal: sys.exit()
+            previous = sys.excepthook.__name__
+            sys.excepthook = exception_handler
+            if previous == 'exception_handler':
+                ExceptionHandler.logger.debug(f'Changed exception handler to "{method.__name__[:-7].upper()}"')
             else:
-                sys.excepthook = self.__class__.defaultHandler
-        except:
-            sys.excepthook = self.__class__.defaultHandler 
-        
-    @staticmethod
-    def defaultHandler(exctype, value, traceback) -> None:
-        print(f'ERROR: "{exctype.__name__}" TEXT: "{value}"')
+                ExceptionHandler.logger.debug(f'Setup exception handler "{method.__name__[:-7].upper()}"')
     
     @staticmethod
-    def productHandler(exctype, value, traceback) -> None:
-        print(f'ERROR: "{exctype.__name__}" TEXT: "{value}"')
-            
+    def defaultHandler(error_type, error, error_trace) -> None:
+        logger = ExceptionHandler.logger or logging.getLogger()
+        logger.error(f'{error_type.__name__}: "{error}"')
+    
     @staticmethod
-    def debugHandler(exctype, value, traceback) -> None:
-        print(f'ERROR: "{exctype.__name__}" TEXT: "{value}"')
-        sys.__excepthook__(exctype, value, traceback)
+    def productHandler(error_type, error, error_trace) -> None:
+        logger = ExceptionHandler.logger or logging.getLogger()
+        logger.error(f'Exception "{error_type.__name__}" occurred!')
+    
+    @staticmethod     
+    def debugHandler(error_type, error, error_trace) -> None:
+        logger = ExceptionHandler.logger or logging.getLogger()
+        try:
+            logger.error(error, exc_info=False)
+        except Exception as e:
+            logger.error(f'Error when handling exception "{error_type.__name__}" ({e})')
+        finally:
+            if logger.level == logging.DEBUG:
+                #sys.__excepthook__(error_type, error, error_trace)
+                traceback.print_exception(None, error, error_trace, chain=True)
 
 
 class freedmBaseException(Exception):
@@ -55,25 +89,17 @@ class freedmBaseException(Exception):
     # A flag causing the program to halt when fatal is True
     fatal: bool = False
     
-    # Logger
-    logger = None
-        
     def __init__(self, error) -> None:
         super().__init__(error)
-        
-        if not logger: self.logger = logging.getLogger()
-        
         try:
-            # Log message
             if isinstance(self.template, str):
-                self.logger.error(self.template.format(error=error), exc_info=self.logger.level == logging.DEBUG)
+                self.message = self.template.format(error=error)
             elif hasattr(self.template, '__call__'):
-                self.logger.error(self.template(error), exc_info=self.logger.level == logging.DEBUG)
+                self.message = self.template(error)
+            else:
+                self.message = error
         except Exception as e:
-            self.logger.error(f'Error when handling free.dm exception "{error.__class__.__name__}" ({e})')
-        finally:
-            # Is this a fatal exception?
-            if self.fatal is True: sys.exit()
+            self.message = f'Error when building exception "{error.__class__.__name__}" message ({e})'
 
 
 class freedmUnsupportedOS(freedmBaseException):

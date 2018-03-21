@@ -15,7 +15,7 @@ try:
     
     # free.dm Imports
     from freedm.utils.ipc.server.base import IPCSocketServer
-    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation
+    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation, freedmIPCSocketShutdown
     from freedm.utils.ipc.connection import Connection, ConnectionType
     from freedm.utils.ipc.protocol import Protocol
 except ImportError as e:
@@ -46,10 +46,8 @@ class UXDSocketServer(IPCSocketServer):
         self.path = path
 
     async def __aenter__(self) -> US:
-        # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
         if not self.path:
-            pass
-#             raise freedmIPCSocketCreation(f'Cannot create UXD socket (No socket file provided)')
+            raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
         elif os.path.exists(self.path):
             if os.path.isdir(self.path):
                 try:
@@ -62,6 +60,7 @@ class UXDSocketServer(IPCSocketServer):
                 except Exception as e:
                     raise freedmIPCSocketCreation(f'Cannot delete UXD socket file "{self.path}" ({e})')
         try:
+            # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.bind(self.path)
         except Exception as e:
@@ -72,28 +71,28 @@ class UXDSocketServer(IPCSocketServer):
             server = await asyncio.start_unix_server(self._onConnectionEstablished, loop=self.loop, sock=sock, limit=self.limit)
         else:
             server = await asyncio.start_unix_server(self._onConnectionEstablished, loop=self.loop, sock=sock)
-        self._context = server
+        self._server = server
             
-        # Return connection class
+        # Return self
         return self
 
     async def __aexit__(self, *args) -> None:
-        # Call parent method to make sure all pendinf connections are being cancelled
-        await super(self.__class__, self).__aexit__(*args)
+        # Call parent method to make sure all pending connections are being cancelled
+        await super(self.__class__, self).__aexit__()
         # Stop the server and remove UXD socket
         try:
-            self._context.close()
+            self._server.close()
         except Exception as e:
-            self.logger.error('Cannot close IPC UXD socket server', self._context, e)
+            self.logger.error('Cannot close IPC UXD socket server', self._server, e)
         try:   
-            await self._context.wait_closed()
+            await self._server.wait_closed()
         except Exception as e:
-            self.logger.error('Cannot wait until IPC UXD server closes', self._context, e)    
+            self.logger.error('Could not wait until IPC UXD server closed', self._server, e)    
         try:
             os.remove(self.path)
         except Exception as e:
-            raise freedmIPCSocketCreation(f'Could not remove socket file "{self.path}" after closing the server ({e})')
-        self.logger.debug('IPC server closed (UXD socket "{self.path}")')
+            raise freedmIPCSocketShutdown(e)
+        self.logger.debug(f'IPC server closed (UXD socket "{self.path}")')
         
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         sock = writer.get_extra_info('socket')
@@ -110,7 +109,8 @@ class UXDSocketServer(IPCSocketServer):
             writer=writer,
             state={
                 'mode': self.mode or ConnectionType.PERSISTENT,
-                'creation': time.time(),
-                'update': time.time() 
+                'created': time.time(),
+                'updated': time.time(),
+                'closed': None
                 }
             )

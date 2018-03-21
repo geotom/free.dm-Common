@@ -39,7 +39,7 @@ class IPCSocketServer(object):
     '''
     
     # The context (This server)
-    _context: IS=None
+    _server: Type[asyncio.AbstractServer]=None
     
     # A register for active client connections
     _connection_pool: ConnectionPool=None
@@ -54,12 +54,12 @@ class IPCSocketServer(object):
             protocol: Optional[Protocol]=None
             ) -> None:
         
-        self.logger = logging.getLogger()
-        self.loop = loop or getLoop()
-        self.limit = limit
-        self.chunksize = chunksize
-        self.mode = mode
-        self.protocol = protocol
+        self.logger     = logging.getLogger()
+        self.loop       = loop or getLoop()
+        self.limit      = limit
+        self.chunksize  = chunksize
+        self.mode       = mode
+        self.protocol   = protocol
         
         if not self._connection_pool:
             self._connection_pool = ConnectionPool()
@@ -100,8 +100,9 @@ class IPCSocketServer(object):
             writer=writer,
             state={
                 'mode': self.mode or ConnectionType.PERSISTENT,
-                'creation': time.time(),
-                'update': time.time()
+                'created': time.time(),
+                'updated': time.time(),
+                'closed': None
                 }
             )
     
@@ -135,6 +136,7 @@ class IPCSocketServer(object):
         End and close an existing connection:
         Acknowledge or inform client about EOF, then close
         '''
+        connection.state['closed'] = time.time()
         if not connection.writer.transport.is_closing():
             if connection.reader.at_eof():
                 self.logger.debug('IPC connection closed by client')
@@ -162,7 +164,7 @@ class IPCSocketServer(object):
         chunks = 0
         while not connection.reader.at_eof():
             # Update the connection
-            connection.state['update'] = time.time()
+            connection.state['updated'] = time.time()
             # Read up to the limit or as many chunks until the limit
             try:
                 if self.chunksize:
@@ -196,7 +198,7 @@ class IPCSocketServer(object):
         '''
         return True
     
-    async def handleMessage(self, message):
+    async def handleMessage(self, message: Message):
         '''
         A template function that should be overwritten by any subclass if required
         '''
@@ -227,6 +229,6 @@ class IPCSocketServer(object):
     
     async def close(self) -> None:
         '''
-        Shutdown this server
+        Stop this server
         '''
         await self.__aexit__()

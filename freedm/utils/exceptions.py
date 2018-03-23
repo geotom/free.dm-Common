@@ -22,7 +22,7 @@ class ExceptionHandler(object):
     
     def __init__(self, handler: Optional[str]=None, logger: Optional[Type[logging.logging.Logger]]=None):
         # Set a logger
-        ExceptionHandler.logger = logger or logging.getLogger()
+        self.__class__.logger = logger or logging.getLogger()
         # Get correct exception handler
         try:
             if not handler: handler = 'default'

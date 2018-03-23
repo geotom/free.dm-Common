@@ -11,6 +11,7 @@ try:
     from typing import Union, Type, Optional, Set, TypeVar, Iterable
     
     # free.dm Imports
+    from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
     from freedm.utils.types import TypeChecker as checker
@@ -26,7 +27,7 @@ except ImportError as e:
 IS = TypeVar('IS', bound='IPCSocketServer')
 
 
-class IPCSocketServer(object):
+class IPCSocketServer(BlockingContextManager):
     '''
     A generic server implementation for IPC servers allowing to communicate with connected clients
     while keeping a list of active connections. It can be used as a contextmanager or as asyncio awaitable.
@@ -70,6 +71,8 @@ class IPCSocketServer(object):
         '''
         A template function that should be implemented by any subclass
         '''
+        # Call parent (Required to profit from SaveContextManager)
+        await super().__aenter__()
         return self
         
     async def __aexit__(self) -> None:
@@ -78,6 +81,9 @@ class IPCSocketServer(object):
         '''
         for c in self._connection_pool:
             c.cancel()
+            
+        # Call parent (Required to profit from SaveContextManager)
+        await super().__aexit__()
         
     async def __await__(self) -> IS:
         '''
@@ -118,7 +124,7 @@ class IPCSocketServer(object):
         if self._connection_pool.isFull():
             session = asyncio.ensure_future(self.rejectConnection(connection, 'Too many connections'))
         else:
-            session = asyncio.ensure_future(self.handleConnection(connection))
+            session = asyncio.ensure_future(self._handleConnection(connection))
             self._connection_pool.add(session)
             session.add_done_callback(lambda task: self._connection_pool.remove(session))
         return session
@@ -148,7 +154,7 @@ class IPCSocketServer(object):
             connection.writer.close()
             self.logger.debug('IPC connection writer closed')
     
-    async def handleConnection(self, connection: Connection) -> None:
+    async def _handleConnection(self, connection: Connection) -> None:
         '''
         Handle the connection and listen for incoming messages until we receive an EOF.
         '''

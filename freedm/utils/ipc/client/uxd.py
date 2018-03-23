@@ -45,10 +45,13 @@ class UXDSocketClient(IPCSocketClient):
             protocol: Optional[Protocol]=None
             ) -> None:
         
-        super(self.__class__, self).__init__(loop, timeout, limit, chunksize, mode, protocol)
+        super().__init__(loop, timeout, limit, chunksize, mode, protocol)
         self.path = path
         
     async def __aenter__(self) -> UC:
+        # Call parent (Required to profit from SaveContextManager)
+        await super().__aenter__()
+        
         if not self.path:
             raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
         try:
@@ -57,8 +60,7 @@ class UXDSocketClient(IPCSocketClient):
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
             self._socket.connect(self.path)
             reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop)
-            self._connection = self._assembleConnection(reader, writer)
-            self._handler = asyncio.ensure_future(self.handleConnection(self._connection))
+            await self._onConnectionEstablished(self._assembleConnection(reader, writer))
         except Exception as e:
             self._connection = None
             self._handler = None
@@ -67,10 +69,7 @@ class UXDSocketClient(IPCSocketClient):
         # Return self
         return self
         
-    async def __aexit__(self, *args) -> None:
-        # Call parent method to make sure all pending connections are being cancelled
-        await super(self.__class__, self).__aexit__()
-        # Close the connection socket 
+    async def _post_disconnect(self, connection) -> None:
         if self._socket:
             sock = self._socket
             self._socket = None
@@ -79,7 +78,7 @@ class UXDSocketClient(IPCSocketClient):
             except Exception as e:
                 raise freedmIPCSocketShutdown(e)
             self.logger.debug(f'IPC connection closed (UXD socket "{self.path}")')
-                    
+                                
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         '''
         Assemble a connection object based on the info we get from the reader/writer

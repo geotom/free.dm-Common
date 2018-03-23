@@ -42,10 +42,13 @@ class UXDSocketServer(IPCSocketServer):
             protocol: Optional[Protocol]=None
             ) -> None:
         
-        super(self.__class__, self).__init__(loop, limit, chunksize, max_connections, mode, protocol)
+        super().__init__(loop, limit, chunksize, max_connections, mode, protocol)
         self.path = path
 
     async def __aenter__(self) -> US:
+        # Call parent (Required to profit from SaveContextManager)
+        await super().__aenter__()
+        
         if not self.path:
             raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
         elif os.path.exists(self.path):
@@ -78,7 +81,7 @@ class UXDSocketServer(IPCSocketServer):
 
     async def __aexit__(self, *args) -> None:
         # Call parent method to make sure all pending connections are being cancelled
-        await super(self.__class__, self).__aexit__()
+        await super().__aexit__()
         # Stop the server and remove UXD socket
         try:
             self._server.close()

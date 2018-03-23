@@ -7,11 +7,11 @@ Subclass from this class to create a custom IPC server implementation.
 try:
     # Imports
     import asyncio
-    import signal
     import time
     from typing import TypeVar, Optional, Type, Union
     
     # free.dm Imports
+    from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
     from freedm.utils.ipc.protocol import Protocol
@@ -25,7 +25,7 @@ except ImportError as e:
 IC = TypeVar('IC', bound='IPCSocketClient')
 
 
-class IPCSocketClient(object):
+class IPCSocketClient(BlockingContextManager):
     '''
     A generic client implementation to connect to IPC servers. It can be used 
     as a contextmanager or as asyncio awaitable. It supports basic message 
@@ -63,31 +63,42 @@ class IPCSocketClient(object):
         '''
         A template function that should be implemented by any subclass
         '''
-        self._connection = self._assembleConnection(reader=asyncio.StreamReader(), writer=asyncio.StreamWriter())
-        self._handler = asyncio.ensure_future(self.handleConnection(self._connection))
-        self._handler.add_done_callback(self.__aexit__)
+        # Call parent (Required to profit from SaveContextManager)
+        await super().__aenter__()
         return self
         
     async def __aexit__(self) -> None:
         '''
-        Cancel the connection and close the socket
+        Cancel the connection handler and close the connection
         '''
-        if self._handler:
-            
-            print('==> CANCELING HANDLER', self._handler)
-            
-            # Set internals to None again
-            handler = self._handler
-            connection = self._connection
-            self._handler = None
-            self._connection = None
-            
-            # Cancel the handler
+        # Set internals to None again
+        handler = self._handler
+        connection = self._connection
+        self._handler = None
+        self._connection = None
+             
+        # Call pre-shutdown preparation
+        try:
+            await self._pre_disconnect(connection)
+        except Exception as e:
+            self.logger.error(f'IPC connection pre-shutdown failed with error ({e})')
+        
+        # Cancel the handler  
+        if handler:
             handler.cancel()
             
-            # Close the connection
+        # Close the connection
+        if connection:
             await self.closeConnection(connection)
             
+        # Call post shutdown cleanup
+        try:
+            await self._post_disconnect(connection)
+        except Exception as e:
+            self.logger.error(f'IPC connection pre-shutdown failed with error ({e})')
+            
+        # Call parent (Required to profit from SaveContextManager)
+        await super().__aexit__()
 
     async def __await__(self) -> IC:
         '''
@@ -96,7 +107,10 @@ class IPCSocketClient(object):
         return await self.__aenter__()
     
     def connected(self):
-        return self._connection and self._connection.state['closed']
+        '''
+        Checks if the connection is still alive
+        '''
+        return self._connection and not self._connection.state['closed']
     
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         '''
@@ -124,44 +138,87 @@ class IPCSocketClient(object):
         End and close an existing connection:
         Acknowledge or inform client about EOF, then close
         '''
-        connection.state['closed'] = time.time()
         if not connection.writer.transport.is_closing():
-            if connection.reader.at_eof():
-                self.logger.debug('IPC connection closed by server')
-                connection.reader.feed_eof()
-            else:
-                self.logger.debug('IPC connection closed by client')
-                if connection.writer.can_write_eof(): connection.writer.write_eof()
-            await asyncio.sleep(.1)
-            connection.writer.close()
-            self.logger.debug('IPC connection writer closed')
+            print('CLOSING CONECTION!!!')
+            try:
+                if connection.reader.at_eof():
+                    self.logger.debug('IPC connection closed by server')
+                    connection.reader.feed_eof()
+                else:
+                    self.logger.debug('IPC connection closed by client')
+                    if connection.writer.can_write_eof(): connection.writer.write_eof()
+                await asyncio.sleep(.1)
+                connection.writer.close()
+            except:
+                pass
+            finally:
+                connection.state['closed'] = time.time()
+                self.logger.debug('IPC connection writer closed')
+                
+    async def _onConnectionEstablished(self, connection: Connection) -> None:
+        '''
+        This function calls the connection handler and ensures its closing when a timeout is set
+        '''
+        self._connection = connection
+        self._handler = asyncio.ensure_future(self._handleConnection(self._connection), loop=self.loop)
+        # Stop the connection handler after a specified timeout
+        if self.timeout:
+            await asyncio.sleep(self.timeout)
+            if not self._handler.done():
+                self._handler.cancel()
+                await self.close()
+                self.logger.debug(f'IPC connection stopped after timeout of {self.timeout} seconds')
+                
+    async def _pre_disconnect(self, connection: Connection) -> None:
+        '''
+        Template function to prepare the closing of the connection
+        before we call closeConnection(__aexit__)
+        '''
+        return
     
-    async def handleConnection(self, connection: Connection) -> None:
+    async def _post_disconnect(self, connection: Connection) -> None:
+        '''
+        Template function to cleanup after the closing of the connection
+        via closeConnection(__aexit__)
+        '''
+        return
+    
+    async def _handleConnection(self, connection: Connection) -> None:
         '''
         Handle the connection and listen for incoming messages until we receive an EOF.
         '''
-        print('----------------------------')
-        print('Handling the connection', connection)
-        print('Timeout', self.timeout)
-        print('----------------------------')
+        try:
+#             print('----------------------------')
+#             print('Handling the connection', connection)
+#             print('Timeout', self.timeout)
+#             print('----------------------------')
+            while True:
+                print('...handling Connection')
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            print('I, THE HANDLER GOT CANCELED !!!')
+            #return
+        except:
+            return
     
     async def handleMessage(self, message: Message):
         '''
         A template function that should be overwritten by any subclass if required
         '''
         
-        NOCH AUF TIMEOUT ACHTEN
-         
-        LANGLEBIGE CLIENT CONNECTIONS müssen geschlossen werden können
-        
-        SOlLEN BEI WITH ASYNC gleich Connection auf Ephemeral gesetzt werden?
-         
-        Einen Incoming Listener implementieren
-        
-        Send message implementieren
-        
-        CONTEXT MANAGER MIT SIGNALS DIE AUF KEYBOARD INTERRUPTS ACHTEN
-        https://stackoverflow.com/questions/842557/how-to-prevent-a-block-of-code-from-being-interrupted-by-keyboardinterrupt-in-py/21919644
+#         NOCH AUF TIMEOUT ACHTEN
+#          
+#         LANGLEBIGE CLIENT CONNECTIONS müssen geschlossen werden können
+#         
+#         SOlLEN BEI WITH ASYNC gleich Connection auf Ephemeral gesetzt werden?
+#          
+#         Einen Incoming Listener implementieren
+#         
+#         Send message implementieren
+#         
+#         CONTEXT MANAGER MIT SIGNALS DIE AUF KEYBOARD INTERRUPTS ACHTEN
+#         https://stackoverflow.com/questions/842557/how-to-prevent-a-block-of-code-from-being-interrupted-by-keyboardinterrupt-in-py/21919644
+#         https://www.python.org/dev/peps/pep-0419/
         
         self.logger.debug(f'IPC server received: {message.data.decode()}')
         await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)

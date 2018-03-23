@@ -33,10 +33,16 @@ FORMAT_DEBUG    = '%(asctime)s %(levelname)-8s %(message)s [%(module)s.%(funcNam
 
 
 def getLevelName(level: int) -> str:
+    '''
+    Return the current log-level name
+    '''
     return logging.getLevelName(level)
 
 
 def setFormat(name: Optional[Union[int, str]]=None, fmt: str=None, datefmt: str=None) -> None:
+    '''
+    Set a new logger format on all logger handlers
+    '''
     if name is None: name = os.getpid()
     logger = getLogger(name)
     formatter = logging.Formatter(fmt if fmt else (FORMAT_DEBUG if logger.level == logging.DEBUG else FORMAT_DEFAULT), datefmt if datefmt else FORMAT_DATE)
@@ -57,7 +63,7 @@ def getLogger(name: Optional[Union[int, str]]=None, level: Optional[int]=None, h
         level = logging.DEBUG
     elif level:
         level = int(level)
-    
+        
     # Define logger format
     formatter = logging.Formatter(FORMAT_DEBUG if level == logging.DEBUG else FORMAT_DEFAULT, FORMAT_DATE)
         
@@ -73,9 +79,12 @@ def getLogger(name: Optional[Union[int, str]]=None, level: Optional[int]=None, h
             # Update the log level/handlers if required
             if level and logger.level != level:
                 logger.setLevel(level)
-                for handler in logger.handlers:
-                    handler.setFormatter(formatter)
                 logger.debug(f'Changed log level of logger "{name}" to "{getLevelName(level)}"')
+            # Update format
+            if level:
+                for handler in logger.handlers:
+                    if handler.formatter._fmt != formatter._fmt:
+                        handler.setFormatter(formatter)
         else:
             # Create new logger via logging factory
             logger = logging.getLogger(name=name)  

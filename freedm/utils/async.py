@@ -4,6 +4,8 @@ This module provides concurrency related utility methods based on asyncio
 '''
 
 # Imports
+import sys
+import signal
 import asyncio
 try:
     import uvloop
@@ -13,6 +15,7 @@ from typing import Iterable, Any, Callable, Coroutine, Tuple, Type, Optional
 from concurrent.futures import ThreadPoolExecutor
 
 # free.dm Imports
+from freedm.utils import logging
 from freedm.utils.types import TypeChecker as checker
 from freedm.utils.exceptions import freedmBaseException
 
@@ -49,8 +52,76 @@ def getLoop(policy: Optional[Type[asyncio.AbstractEventLoopPolicy]]=None) -> asy
         if not loop.get_exception_handler():
             loop.set_exception_handler(handle_exception)
         return loop
+
+
+class BlockingContextManager(object):
+    '''
+    An async context manager which is safe from being
+    interrupted by certain signals like SIGINT (Keyboard
+    interupt) or SIGTERM. It will wait for the "with-block"
+    to finish before resuming the SIGNAL by its original 
+    registered handler.
+    '''
+    # List of respected signals
+    signals = (
+        signal.SIGINT,
+        signal.SIGTERM
+        )
     
+    # Logger
+    logger = None
     
+    async def __aenter__(self):
+        '''
+        In case we don't call this context manager as awaitable,
+        then setup new temporary signal handlers, save the original handlers
+        and block any of the defined signals until the context finishes
+        '''
+        # Setup logger
+        if not self.logger: self.logger = logging.getLogger()
+        
+        # Check if we are awaited
+        if sys._getframe(3).f_code.co_name == '__await__':
+            return self
+        
+        self._signal_received = {}
+        self._old_handlers = {}
+        
+        for sig in self.signals:
+            # Save original handlers while this context is running
+            self._signal_received[sig] = False
+            self._old_handlers[sig] = signal.getsignal(sig)
+            
+            # Intermediate (safe) signal handler
+            def signal_context_handler(s, frame, sig=sig):
+                self._signal_received[sig] = (s, frame)
+                print()
+                self.logger.debug(f'Signal {signal.Signals(sig).name} delayed by blocking context "{self.__class__.__name__}"')
+
+            # Replace the original handler by the handler defined by this context manager
+            self._old_handlers[sig] = signal.getsignal(sig)
+            signal.signal(sig, signal_context_handler)
+        
+        # Return context
+        return self
+
+    async def __aexit__(self):
+        '''
+        If the __aenter__ has stored old signal handlers, then
+        reinstate them and resume with the caught signal
+        '''
+        try:
+            self._old_handlers
+            for sig in self.signals:
+                # Reinstate the original handler and continue with the received frame
+                signal.signal(sig, self._old_handlers[sig])
+                if self._signal_received[sig] and self._old_handlers[sig]:
+                    self.logger.debug(f'Signal {signal.Signals(sig).name} resumed')
+                    self._old_handlers[sig](*self._signal_received[sig])
+        except:
+            return
+
+
 class freedmAsyncLoopCreation(freedmBaseException):
     '''
     Gets thrown when no asyncio loop can be created

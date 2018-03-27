@@ -79,8 +79,19 @@ class IPCSocketServer(BlockingContextManager):
         '''
         Cancel all pending connections in the connection pool
         '''
-        for c in self._connection_pool:
-            c.cancel()
+        # Cancel active connection handlers
+        for connection in self._connection_pool:
+            connection.cancel()
+        
+        # Inform active clients of exit
+        try:
+            asyncio.wait(
+                [await self.closeConnection(c) for c in self._connection_pool.getConnections()],
+                timeout=3,
+                loop=self.loop
+                )
+        except:
+            pass
             
         # Call parent (Required to profit from SaveContextManager)
         await super().__aexit__()
@@ -124,7 +135,7 @@ class IPCSocketServer(BlockingContextManager):
         if self._connection_pool.isFull():
             session = asyncio.ensure_future(self.rejectConnection(connection, 'Too many connections'))
         else:
-            session = asyncio.ensure_future(self._handleConnection(connection))
+            session = asyncio.ensure_future(self._handleConnection(connection), loop=self.loop)
             self._connection_pool.add(session)
             session.add_done_callback(lambda task: self._connection_pool.remove(session))
         return session
@@ -137,7 +148,7 @@ class IPCSocketServer(BlockingContextManager):
         if reason: await self.sendMessage(reason, connection)
         await self.closeConnection(connection)
         
-    async def closeConnection(self, connection):
+    async def closeConnection(self, connection: Connection) -> None:
         '''
         End and close an existing connection:
         Acknowledge or inform client about EOF, then close
@@ -181,8 +192,11 @@ class IPCSocketServer(BlockingContextManager):
                 else:
                     raw = await connection.reader.read(self.limit or -1)
             except asyncio.CancelledError:
+                # We exit and can return as the connection closing is handled in __aexit__
                 return
             except Exception as e:
+                # TODO: Don't raise an error or self.closeConnection
+                await self.closeConnection(connection)
                 raise freedmIPCMessageReader(e)
             # Handle the received message or message fragment
             if not len(raw) == 0:
@@ -193,6 +207,8 @@ class IPCSocketServer(BlockingContextManager):
                 try:
                     await self.handleMessage(message)
                 except Exception as e:
+                    # TODO: Don't raise an error or self.closeConnection
+                    # self.closeConnection(connection)
                     raise freedmIPCMessageHandler(e)
         
         # Close the connection (It will be automatically removed from the pool)

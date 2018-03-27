@@ -8,15 +8,17 @@ try:
     # Imports
     import asyncio
     import time
-    from typing import TypeVar, Optional, Type, Union
+    from typing import TypeVar, Optional, Type, Union, Iterable
     
     # free.dm Imports
     from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
-    from freedm.utils.ipc.protocol import Protocol
+    from freedm.utils.types import TypeChecker as checker
     from freedm.utils.ipc.message import Message
+    from freedm.utils.ipc.protocol import Protocol
     from freedm.utils.ipc.connection import Connection, ConnectionType
+    from freedm.utils.ipc.exceptions import freedmIPCMessageReader, freedmIPCMessageHandler, freedmIPCMessageWriter, freedmIPCMessageLimitOverrun
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
@@ -67,10 +69,14 @@ class IPCSocketClient(BlockingContextManager):
         await super().__aenter__()
         return self
         
-    async def __aexit__(self) -> None:
+    async def __aexit__(self, *args) -> None:
         '''
         Cancel the connection handler and close the connection
         '''
+        if not self.connected(): return
+        
+        print('CLOSING NOW via __AEXIT__!!!!')
+        
         # Set internals to None again
         handler = self._handler
         connection = self._connection
@@ -98,7 +104,7 @@ class IPCSocketClient(BlockingContextManager):
             self.logger.error(f'IPC connection pre-shutdown failed with error ({e})')
             
         # Call parent (Required to profit from SaveContextManager)
-        await super().__aexit__()
+        await super().__aexit__(*args)
 
     async def __await__(self) -> IC:
         '''
@@ -139,7 +145,7 @@ class IPCSocketClient(BlockingContextManager):
         Acknowledge or inform client about EOF, then close
         '''
         if not connection.writer.transport.is_closing():
-            print('CLOSING CONECTION!!!')
+            print('CLOSING CONNECTION!!!')
             try:
                 if connection.reader.at_eof():
                     self.logger.debug('IPC connection closed by server')
@@ -155,20 +161,28 @@ class IPCSocketClient(BlockingContextManager):
                 connection.state['closed'] = time.time()
                 self.logger.debug('IPC connection writer closed')
                 
-    async def _onConnectionEstablished(self, connection: Connection) -> None:
+    def _onConnectionEstablished(self, connection: Connection) -> None:
         '''
-        This function calls the connection handler and ensures its closing when a timeout is set
+        This function stores the connection and initializes a handler for it
         '''
+        # Set connection and start the handler task
         self._connection = connection
-        self._handler = asyncio.ensure_future(self._handleConnection(self._connection), loop=self.loop)
-        # Stop the connection handler after a specified timeout
-        if self.timeout:
-            await asyncio.sleep(self.timeout)
-            if not self._handler.done():
-                self._handler.cancel()
-                await self.close()
-                self.logger.debug(f'IPC connection stopped after timeout of {self.timeout} seconds')
-                
+        
+        # Start the connection handler
+        try:
+            if not self.timeout:
+                self._handler = asyncio.ensure_future(
+                    self._handleConnection(self._connection), loop=self.loop
+                    )
+            else:
+                self._handler = asyncio.ensure_future(
+                    asyncio.wait_for(
+                        self._handleConnection(self._connection), self.timeout, loop=self.loop
+                        )
+                )
+        except Exception as e:
+            self.logger.debug('IPC connection handler could not be initialized')
+    
     async def _pre_disconnect(self, connection: Connection) -> None:
         '''
         Template function to prepare the closing of the connection
@@ -187,41 +201,87 @@ class IPCSocketClient(BlockingContextManager):
         '''
         Handle the connection and listen for incoming messages until we receive an EOF.
         '''
-        try:
-#             print('----------------------------')
-#             print('Handling the connection', connection)
-#             print('Timeout', self.timeout)
-#             print('----------------------------')
-            while True:
-                print('...handling Connection')
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            print('I, THE HANDLER GOT CANCELED !!!')
-            #return
-        except:
-            return
+        print('>>> STARTING CONNECTION HANDLER')
+        
+        # Read data depending on the connection type and handle it
+        chunks = 0
+        while not connection.reader.at_eof():
+            # Update the connection
+            connection.state['updated'] = time.time()
+            # Read up to the limit or as many chunks until the limit
+            try:
+                if self.chunksize:
+                    if self.limit and self.limit - chunks*self.chunksize < self.chunksize:
+                        break
+                    raw = await connection.reader.read(self.chunksize)
+                    chunks += 1
+                else:
+                    raw = await connection.reader.read(self.limit or -1)
+            except asyncio.CancelledError:
+                print('<<< I, THE HANDLER GOT CANCELED !!!')
+                break
+            except Exception as e:
+                print('HANDLER ERROR', type(e), e)
+                # TODO: Don't raise an error or self.closeConnection
+                #raise freedmIPCMessageReader(e)
+                break
+            # Handle the received message or message fragment
+            if not len(raw) == 0:
+                message = Message(
+                    data=raw,
+                    sender=connection
+                    )
+                try:
+                    await self.handleMessage(message)
+                except Exception as e:
+                    # TODO: Don't raise an error or self.close
+                    # await self.close()
+                    raise freedmIPCMessageHandler(e)
+        
+        # Close this connection again
+        await self.close()
     
     async def handleMessage(self, message: Message):
         '''
         A template function that should be overwritten by any subclass if required
         '''
-        
-#         NOCH AUF TIMEOUT ACHTEN
-#          
-#         LANGLEBIGE CLIENT CONNECTIONS müssen geschlossen werden können
+        self.logger.debug(f'IPC client received: {message.data.decode()}')
+        await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)          
 #         
 #         SOlLEN BEI WITH ASYNC gleich Connection auf Ephemeral gesetzt werden?
 #          
 #         Einen Incoming Listener implementieren
 #         
 #         Send message implementieren
-#         
-#         CONTEXT MANAGER MIT SIGNALS DIE AUF KEYBOARD INTERRUPTS ACHTEN
-#         https://stackoverflow.com/questions/842557/how-to-prevent-a-block-of-code-from-being-interrupted-by-keyboardinterrupt-in-py/21919644
-#         https://www.python.org/dev/peps/pep-0419/
+
+    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None) -> None:
+        '''
+        Send a message to either one or more connections
+        '''
         
-        self.logger.debug(f'IPC server received: {message.data.decode()}')
-        await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)
+        #TODO: HIER UND IM SERVER DIE NACHRICHTEN GLEICHZEITIG VERSENDEN MIT asyncio.wait
+        
+        
+        for c in [[connection] if not checker.isIterable(connection) else connection]:
+            # Write message to socket if size is met and connection not closed
+            try:
+                message = str(message).encode()
+                if len(message) == 0:
+                    return
+                if self.limit and len(message) > self.limit:
+                    raise freedmIPCMessageLimitOverrun()
+                if not c.writer.transport.is_closing():
+                    c.writer.write(message)
+                    await c.writer.drain()
+            except Exception as e:
+                raise freedmIPCMessageWriter(e)
+            
+            
+        # TODO: Macht Ephemeral hier eigentlich Sinn oder nicht?
+        
+            # In case this is an ephemeral connection, close it immediately after sending this message
+            if c.state['mode'] == ConnectionType.EPHEMERAL:
+                await self.close()
     
     async def close(self) -> None:
         '''

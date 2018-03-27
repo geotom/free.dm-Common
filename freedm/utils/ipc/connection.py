@@ -8,6 +8,7 @@ import time
 from datetime import timedelta
 from enum import Enum
 from collections import namedtuple
+from asyncio import Task
 from typing import Type, TypeVar, List
 
 # free.dm Imports
@@ -39,6 +40,12 @@ class ConnectionPool(set):
         Returns if this connection pool can still accept new connections
         '''
         return False if not self.max else self.max <= len(self)
+    
+    def getConnectionForHandler(self, handler: Task) -> List[C]:
+        '''
+        Return the connection for a specific connection handler
+        '''
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if handler is c][0]
     
     def getConnections(self) -> List[C]:
         '''

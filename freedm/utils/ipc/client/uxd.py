@@ -55,12 +55,18 @@ class UXDSocketClient(IPCSocketClient):
         if not self.path:
             raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
         try:
+            
+            print('>>> ENTERING NOW __AENTER__!!!')
+            
             # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
             self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
             self._socket.connect(self.path)
             reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop)
-            await self._onConnectionEstablished(self._assembleConnection(reader, writer))
+            self._onConnectionEstablished(self._assembleConnection(reader, writer))
+            
+            print('<<< LEAVING NOW FROM __AENTER__!!!')
+            
         except Exception as e:
             self._connection = None
             self._handler = None
@@ -78,7 +84,8 @@ class UXDSocketClient(IPCSocketClient):
             except Exception as e:
                 raise freedmIPCSocketShutdown(e)
             self.logger.debug(f'IPC connection closed (UXD socket "{self.path}")')
-                                
+            return
+                           
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         '''
         Assemble a connection object based on the info we get from the reader/writer

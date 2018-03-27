@@ -7,6 +7,7 @@ This module provides concurrency related utility methods based on asyncio
 import sys
 import signal
 import asyncio
+from _asyncio import Future
 try:
     import uvloop
 except ImportError:
@@ -48,7 +49,17 @@ def getLoop(policy: Optional[Type[asyncio.AbstractEventLoopPolicy]]=None) -> asy
         raise freedmAsyncLoopCreation(e)
     finally:
         def handle_exception(loop, context):
-            raise freedmAsyncLoopException(context.get('exception') or context.get('message'))
+            e_message = context.get('message')
+            e_future = context.get('future')
+            e_error = context.get('exception')
+            e_trace = e_error.__traceback__ if e_error else None
+            if e_future:
+                e_code = e_future.get_stack()[0].f_code
+                e_error = freedmAsyncLoopException(f'''Async exception "{e_error or e_message}" in "{e_future._coro.__qualname__}" ({e_code.co_filename}:{e_code.co_firstlineno})''')
+            else:
+                e_error = freedmAsyncLoopException(f'''Async exception "{e_error or e_message}"''')
+            e_type = type(e_error)
+            sys.excepthook(e_type, e_error, e_trace)
         if not loop.get_exception_handler():
             loop.set_exception_handler(handle_exception)
         return loop
@@ -105,7 +116,7 @@ class BlockingContextManager(object):
         # Return context
         return self
 
-    async def __aexit__(self):
+    async def __aexit__(self, *args):
         '''
         If the __aenter__ has stored old signal handlers, then
         reinstate them and resume with the caught signal

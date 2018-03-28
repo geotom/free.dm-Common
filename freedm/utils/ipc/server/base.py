@@ -3,12 +3,13 @@ This module defines the base IPC server.
 Subclass from this class to create a custom IPC server implementation.
 @author: Thomas Wanderer
 '''
+from mypy.types import Instance
 
 try:
     # Imports
     import asyncio
     import time
-    from typing import Union, Type, Optional, Set, TypeVar, Iterable
+    from typing import Union, Type, Optional, Set, TypeVar, Iterable, Any
     
     # free.dm Imports
     from freedm.utils.async import BlockingContextManager
@@ -73,15 +74,26 @@ class IPCSocketServer(BlockingContextManager):
         '''
         # Call parent (Required to profit from SaveContextManager)
         await super().__aenter__()
+        
+        # Initialize and create a server a server
+        self._server = await self._init_server()
+
+        # Check & Return self
+        if not self._server: self.logger('IPC server could not be started')
         return self
         
     async def __aexit__(self) -> None:
         '''
         Cancel all pending connections in the connection pool
         '''
+        # Call pre-shutdown procedure
+        await self._pre_shutdown()
+        
         # Cancel active connection handlers
         for connection in self._connection_pool:
             connection.cancel()
+            
+        # TODO: Should we also cancel active sendMessage coroutines?
         
         # Inform active clients of exit
         try:
@@ -92,10 +104,23 @@ class IPCSocketServer(BlockingContextManager):
                 )
         except:
             pass
+        
+        # Close the server
+        try:
+            self._server.close()
+        except Exception as e:
+            self.logger.error('Cannot close IPC UXD socket server', self._server, e)
+        try:   
+            await self._server.wait_closed()
+        except Exception as e:
+            self.logger.error('Could not wait until IPC UXD server closed', self._server, e)    
+        
+        # Call post-shutdown procedure
+        await self._post_shutdown()
             
         # Call parent (Required to profit from SaveContextManager)
         await super().__aexit__()
-        
+    
     async def __await__(self) -> IS:
         '''
         Makes this class awaitable
@@ -164,6 +189,28 @@ class IPCSocketServer(BlockingContextManager):
             await asyncio.sleep(.1)
             connection.writer.close()
             self.logger.debug('IPC connection writer closed')
+            
+    async def _init_server(self) -> Any:
+        '''
+        Template function for initializing the server.
+        It should start a server and return it
+        '''
+        return
+        
+    async def _pre_shutdown(self) -> None:
+        '''
+        Template function to prepare the shutdown of the server
+        before we cancel all current connections, signal the shutdown to
+        connected clients and clos the server object
+        '''
+        return
+    
+    async def _post_shutdown(self) -> None:
+        '''
+        Template function to clean up after the server has
+        been shutdown
+        '''
+        return
     
     async def _handleConnection(self, connection: Connection) -> None:
         '''
@@ -185,7 +232,7 @@ class IPCSocketServer(BlockingContextManager):
             # Read up to the limit or as many chunks until the limit
             try:
                 if self.chunksize:
-                    if self.limit and self.limit - chunks*self.chunksize < self.chunksize:
+                    if self.limit and self.limit - chunks * self.chunksize < self.chunksize:
                         break
                     raw = await connection.reader.read(self.chunksize)
                     chunks += 1
@@ -227,27 +274,49 @@ class IPCSocketServer(BlockingContextManager):
         self.logger.debug(f'IPC server received: {message.data.decode()}')
         await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)
         
-    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None) -> None:
+    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None) -> bool:
         '''
         Send a message to either one or more connections
         '''
-        for c in [[connection] if not checker.isIterable(connection) else connection]:
-            # Write message to socket if size is met and connection not closed
-            try:
-                message = str(message).encode()
-                if len(message) == 0:
-                    return
-                if self.limit and len(message) > self.limit:
-                    raise freedmIPCMessageLimitOverrun()
-                if not c.writer.transport.is_closing():
-                    c.writer.write(message)
-                    await c.writer.drain()
-            except Exception as e:
-                raise freedmIPCMessageWriter(e)
+        try:
+            # Get affected connections
+            connections = [connection] if not checker.isIterable(connection) else connection
+    
+            # Encode and check message
+            message = str(message).encode()
+            if len(message) == 0:
+                return
+            if self.limit and len(message) > self.limit:
+                raise freedmIPCMessageLimitOverrun()
             
-            # In case this is an ephemeral connection, close it immediately after sending this message
-            if c.state['mode'] == ConnectionType.EPHEMERAL:
-                await self.closeConnection(c)
+            # Dispatch message to affected connections
+            if len(connections) > 0:                
+                dispatch_report = await asyncio.gather(
+                    *[self._dispatchMessage(message, c) for c in connections],
+                    loop=self.loop,
+                    return_exceptions=True
+                    )
+                return all(not isinstance(success, Exception) for success in dispatch_report)
+        except asyncio.CancelledError:
+            pass
+        
+    async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
+        try:
+            if not connection.writer.transport.is_closing():
+                # Dispatch message
+                connection.writer.write(message)
+                await connection.writer.drain()
+                # Close an ephemeral connection, immediately after sending the message
+                if connection.state['mode'] == ConnectionType.EPHEMERAL:
+                    await self.closeConnection(connection)
+                # Return result
+                return True
+            else:
+                raise freedmIPCMessageWriter(e)   
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            raise freedmIPCMessageWriter(e)
     
     async def close(self) -> None:
         '''

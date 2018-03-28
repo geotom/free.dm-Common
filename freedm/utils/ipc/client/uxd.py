@@ -10,20 +10,16 @@ try:
     import socket
     import time
     from pathlib import Path
-    from typing import TypeVar, Optional, Type, Union
+    from typing import Optional, Type, Union
     
     # free.dm Imports
     from freedm.utils.ipc.client.base import IPCSocketClient
     from freedm.utils.ipc.exceptions import freedmIPCSocketCreation, freedmIPCSocketShutdown
     from freedm.utils.ipc.protocol import Protocol
-    from freedm.utils.ipc.message import Message
     from freedm.utils.ipc.connection import Connection, ConnectionType
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
-
-
-UC = TypeVar('UC', bound='UXDSocketClient')
 
 
 class UXDSocketClient(IPCSocketClient):
@@ -48,32 +44,18 @@ class UXDSocketClient(IPCSocketClient):
         super().__init__(loop, timeout, limit, chunksize, mode, protocol)
         self.path = path
         
-    async def __aenter__(self) -> UC:
-        # Call parent (Required to profit from SaveContextManager)
-        await super().__aenter__()
-        
+    async def _init_connect(self):
         if not self.path:
             raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
         try:
-            
-            print('>>> ENTERING NOW __AENTER__!!!')
-            
             # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
             self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
             self._socket.connect(self.path)
             reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop)
-            self._onConnectionEstablished(self._assembleConnection(reader, writer))
-            
-            print('<<< LEAVING NOW FROM __AENTER__!!!')
-            
+            return self._assembleConnection(reader, writer)
         except Exception as e:
-            self._connection = None
-            self._handler = None
             raise freedmIPCSocketCreation(f'Cannot connect to UXD socket file "{self.path}" ({e})')
-        
-        # Return self
-        return self
         
     async def _post_disconnect(self, connection) -> None:
         if self._socket:

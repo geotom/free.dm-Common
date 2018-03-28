@@ -91,9 +91,14 @@ class BlockingContextManager(object):
         # Setup logger
         if not self.logger: self.logger = logging.getLogger()
         
-        # Check if we are awaited
-        if sys._getframe(3).f_code.co_name == '__await__':
-            return self
+        # Check if we are awaited, thus not use as context manager (by checking the caller history
+        i = 1
+        caller = None
+        while i <  50 and (caller == '__aenter__' or not caller):
+            caller = sys._getframe(i).f_code.co_name
+            i += 1
+            if caller == '__await__':
+                return
         
         self._signal_received = {}
         self._old_handlers = {}

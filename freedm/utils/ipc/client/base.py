@@ -67,6 +67,18 @@ class IPCSocketClient(BlockingContextManager):
         '''
         # Call parent (Required to profit from SaveContextManager)
         await super().__aenter__()
+        
+        # Call pre-connection preparation
+        connection = await self._init_connect()
+        
+        # Connect
+        if connection: self._onConnectionEstablished(connection)
+
+        # Call post-connection preparation
+        if connection: await self._post_connect(connection)
+
+        # Check & Return self
+        if not connection: self.logger('IPC connection could not be established')
         return self
         
     async def __aexit__(self, *args) -> None:
@@ -83,26 +95,18 @@ class IPCSocketClient(BlockingContextManager):
         self._handler = None
         self._connection = None
              
-        # Call pre-shutdown preparation
-        try:
-            await self._pre_disconnect(connection)
-        except Exception as e:
-            self.logger.error(f'IPC connection pre-shutdown failed with error ({e})')
+        # Call pre-shutdown procedure
+        await self._pre_disconnect(connection)
         
         # Cancel the handler  
-        if handler:
-            handler.cancel()
+        if handler: handler.cancel()
             
         # Close the connection
-        if connection:
-            await self.closeConnection(connection)
+        if connection: await self.closeConnection(connection)
             
-        # Call post shutdown cleanup
-        try:
-            await self._post_disconnect(connection)
-        except Exception as e:
-            self.logger.error(f'IPC connection pre-shutdown failed with error ({e})')
-            
+        # Call post shutdown procedure
+        await self._post_disconnect(connection)
+
         # Call parent (Required to profit from SaveContextManager)
         await super().__aexit__(*args)
 
@@ -116,7 +120,8 @@ class IPCSocketClient(BlockingContextManager):
         '''
         Checks if the connection is still alive
         '''
-        return self._connection and not self._connection.state['closed']
+    
+        return (self._connection and not self._connection.state['closed'])
     
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         '''
@@ -183,17 +188,30 @@ class IPCSocketClient(BlockingContextManager):
         except Exception as e:
             self.logger.debug('IPC connection handler could not be initialized')
     
+    async def _init_connect(self) -> Optional[Connection]:
+        '''
+        Template function for initializing a connection.
+        It should return a connection object.
+        '''
+        return
+    
+    async def _post_connect(self, connection: Connection) -> None:
+        '''
+        Template function called after the establishment of a connection
+        '''
+        return
+    
     async def _pre_disconnect(self, connection: Connection) -> None:
         '''
         Template function to prepare the closing of the connection
-        before we call closeConnection(__aexit__)
+        before we cancel the connection handler
         '''
         return
     
     async def _post_disconnect(self, connection: Connection) -> None:
         '''
-        Template function to cleanup after the closing of the connection
-        via closeConnection(__aexit__)
+        Template function to cleanup after the connection closing was
+        signaled via self.closeConnection
         '''
         return
     
@@ -211,7 +229,7 @@ class IPCSocketClient(BlockingContextManager):
             # Read up to the limit or as many chunks until the limit
             try:
                 if self.chunksize:
-                    if self.limit and self.limit - chunks*self.chunksize < self.chunksize:
+                    if self.limit and self.limit - chunks * self.chunksize < self.chunksize:
                         break
                     raw = await connection.reader.read(self.chunksize)
                     chunks += 1
@@ -219,6 +237,9 @@ class IPCSocketClient(BlockingContextManager):
                     raw = await connection.reader.read(self.limit or -1)
             except asyncio.CancelledError:
                 print('<<< I, THE HANDLER GOT CANCELED !!!')
+                break
+            except ConnectionResetError as e:
+                print('<<< I, THE CONNECTION GOT RESET !!!')
                 break
             except Exception as e:
                 print('HANDLER ERROR', type(e), e)
@@ -246,7 +267,7 @@ class IPCSocketClient(BlockingContextManager):
         A template function that should be overwritten by any subclass if required
         '''
         self.logger.debug(f'IPC client received: {message.data.decode()}')
-        await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)          
+        #await self.sendMessage('PONG' if message.data.decode() == 'PING' else message.data.decode(), message.sender)          
 #         
 #         SOlLEN BEI WITH ASYNC gleich Connection auf Ephemeral gesetzt werden?
 #          
@@ -254,34 +275,37 @@ class IPCSocketClient(BlockingContextManager):
 #         
 #         Send message implementieren
 
-    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None) -> None:
+    async def sendMessage(self, message: Union[str, int, float]) -> bool:
         '''
         Send a message to either one or more connections
         '''
         
-        #TODO: HIER UND IM SERVER DIE NACHRICHTEN GLEICHZEITIG VERSENDEN MIT asyncio.wait
+        # TODO. Es gibt ja nur eine Connection zum senden, anders als beim SERVER
         
+        # TODO: Should we also cancel active sendMessage coroutines?
         
-        for c in [[connection] if not checker.isIterable(connection) else connection]:
-            # Write message to socket if size is met and connection not closed
-            try:
-                message = str(message).encode()
-                if len(message) == 0:
-                    return
-                if self.limit and len(message) > self.limit:
-                    raise freedmIPCMessageLimitOverrun()
-                if not c.writer.transport.is_closing():
-                    c.writer.write(message)
-                    await c.writer.drain()
-            except Exception as e:
-                raise freedmIPCMessageWriter(e)
-            
+        pass
+        
+#         for c in [[connection] if not checker.isIterable(connection) else connection]:
+#             # Write message to socket if size is met and connection not closed
+#             try:
+#                 message = str(message).encode()
+#                 if len(message) == 0:
+#                     return
+#                 if self.limit and len(message) > self.limit:
+#                     raise freedmIPCMessageLimitOverrun()
+#                 if not c.writer.transport.is_closing():
+#                     c.writer.write(message)
+#                     await c.writer.drain()
+#             except Exception as e:
+#                 raise freedmIPCMessageWriter(e)
+#             
             
         # TODO: Macht Ephemeral hier eigentlich Sinn oder nicht?
         
-            # In case this is an ephemeral connection, close it immediately after sending this message
-            if c.state['mode'] == ConnectionType.EPHEMERAL:
-                await self.close()
+        # In case this is an ephemeral connection, close it immediately after sending this message
+#         if c.state['mode'] == ConnectionType.EPHEMERAL:
+#             await self.close()
     
     async def close(self) -> None:
         '''

@@ -11,7 +11,7 @@ try:
     import struct
     import time
     from pathlib import Path
-    from typing import Union, Type, Optional, TypeVar
+    from typing import Union, Type, Optional, Any
     
     # free.dm Imports
     from freedm.utils.ipc.server.base import IPCSocketServer
@@ -21,9 +21,6 @@ try:
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
-
-
-US = TypeVar('US', bound='UXDSocketServer')
 
 
 class UXDSocketServer(IPCSocketServer):
@@ -45,10 +42,7 @@ class UXDSocketServer(IPCSocketServer):
         super().__init__(loop, limit, chunksize, max_connections, mode, protocol)
         self.path = path
 
-    async def __aenter__(self) -> US:
-        # Call parent (Required to profit from SaveContextManager)
-        await super().__aenter__()
-        
+    async def _init_server(self) -> Any:
         if not self.path:
             raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
         elif os.path.exists(self.path):
@@ -74,23 +68,12 @@ class UXDSocketServer(IPCSocketServer):
             server = await asyncio.start_unix_server(self._onConnectionEstablished, loop=self.loop, sock=sock, limit=self.limit)
         else:
             server = await asyncio.start_unix_server(self._onConnectionEstablished, loop=self.loop, sock=sock)
-        self._server = server
-            
-        # Return self
-        return self
+        
+        # Return server
+        return server
 
-    async def __aexit__(self, *args) -> None:
-        # Call parent method to make sure all pending connections are being cancelled
-        await super().__aexit__()
-        # Stop the server and remove UXD socket
-        try:
-            self._server.close()
-        except Exception as e:
-            self.logger.error('Cannot close IPC UXD socket server', self._server, e)
-        try:   
-            await self._server.wait_closed()
-        except Exception as e:
-            self.logger.error('Could not wait until IPC UXD server closed', self._server, e)    
+    async def _post_shutdown(self) -> None:
+        # Clean up by removing the UXD socket file
         try:
             os.remove(self.path)
         except Exception as e:

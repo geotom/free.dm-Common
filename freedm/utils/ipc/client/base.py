@@ -3,6 +3,7 @@ This module defines the base IPC server.
 Subclass from this class to create a custom IPC server implementation.
 @author: Thomas Wanderer
 '''
+from rpyc.utils.helpers import async
 
 try:
     # Imports
@@ -18,7 +19,7 @@ try:
     from freedm.utils.ipc.message import Message
     from freedm.utils.ipc.protocol import Protocol
     from freedm.utils.ipc.connection import Connection, ConnectionType
-    from freedm.utils.ipc.exceptions import freedmIPCMessageReader, freedmIPCMessageHandler, freedmIPCMessageWriter, freedmIPCMessageLimitOverrun
+    from freedm.utils.ipc.exceptions import freedmIPCMessageWriter, freedmIPCMessageLimitOverrun
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
@@ -219,54 +220,66 @@ class IPCSocketClient(BlockingContextManager):
         '''
         Handle the connection and listen for incoming messages until we receive an EOF.
         '''
-        print('>>> STARTING CONNECTION HANDLER')
-        
-        # Read data depending on the connection type and handle it
-        chunks = 0
-        while not connection.reader.at_eof():
-            # Update the connection
-            connection.state['updated'] = time.time()
-            # Read up to the limit or as many chunks until the limit
-            try:
-                if self.chunksize:
-                    if self.limit and self.limit - chunks * self.chunksize < self.chunksize:
-                        break
-                    raw = await connection.reader.read(self.chunksize)
-                    chunks += 1
-                else:
-                    raw = await connection.reader.read(self.limit or -1)
-            except asyncio.CancelledError:
-                print('<<< I, THE HANDLER GOT CANCELED !!!')
-                break
-            except ConnectionResetError as e:
-                print('<<< I, THE CONNECTION GOT RESET !!!')
-                break
-            except Exception as e:
-                print('HANDLER ERROR', type(e), e)
-                # TODO: Don't raise an error or self.closeConnection
-                #raise freedmIPCMessageReader(e)
-                break
-            # Handle the received message or message fragment
-            if not len(raw) == 0:
-                message = Message(
-                    data=raw,
-                    sender=connection
-                    )
+        try:
+            # Read data depending on the connection type and handle it
+            chunks = 0
+            chunksize = self.chunksize
+            while not connection.reader.at_eof():
                 try:
-                    await self.handleMessage(message)
+                    # Update the connection
+                    connection.state['updated'] = time.time()
+                    
+                    # Read up to the limit or as many chunks until the limit
+                    if self.chunksize:
+                        # Make sure we read as many chunks till reaching the limit
+                        if self.limit:
+                            chunksize = min(self.limit, self.chunksize)
+                            consumed = chunks * self.chunksize
+                            rest = self.limit - consumed
+                            if self.limit == chunksize and chunks > 0:
+                                break
+                            if rest <= 0:
+                                break
+                            chunksize = chunksize if rest > chunksize else rest
+                        raw = await connection.reader.read(chunksize)
+                        chunks += 1
+                    else:
+                        raw = await connection.reader.read(self.limit or -1)
+                    
+                    # Handle the received message or message fragment
+                    if not len(raw) == 0:
+                        message = Message(
+                            data=raw,
+                            sender=connection
+                            )
+                        
+                        print('SCHAUEN, DASS DIE AUCH GECANCELED WERDEN. MIT ADD DONE CALLBACK')
+                        
+                        handler = asyncio.ensure_future(self.handleMessage(message))
+                except asyncio.CancelledError as e:
+                    pass
                 except Exception as e:
-                    # TODO: Don't raise an error or self.close
-                    # await self.close()
-                    raise freedmIPCMessageHandler(e)
+                    self.logger.error(f'IPC connection error ({e})')
+                    
+        except asyncio.CancelledError:
+            pass
+        except ConnectionError as e:
+            self.logger.error(f'IPC connection failed ({e})')
+        except Exception as e:
+            self.logger.error(f'IPC connection error ({e})')
         
         # Close this connection again
         await self.close()
     
     async def handleMessage(self, message: Message):
         '''
-        A template function that should be overwritten by any subclass if required
+        A template function that should be overwritten by any subclass if required.
         '''
+#         await asyncio.sleep(1)
+        import time
+#         time.sleep(4)
         self.logger.debug(f'IPC client received: {message.data.decode()}')
+        await asyncio.sleep(2)
         #await self.sendMessage('PONG' if message.data.decode() == 'PING' else message.data.decode(), message.sender)          
 #         
 #         SOlLEN BEI WITH ASYNC gleich Connection auf Ephemeral gesetzt werden?

@@ -19,7 +19,7 @@ try:
     from freedm.utils.ipc.message import Message
     from freedm.utils.ipc.protocol import Protocol
     from freedm.utils.ipc.connection import Connection, ConnectionType, ConnectionPool
-    from freedm.utils.ipc.exceptions import freedmIPCMessageReader, freedmIPCMessageHandler, freedmIPCMessageLimitOverrun, freedmIPCMessageWriter
+    from freedm.utils.ipc.exceptions import freedmIPCMessageLimitOverrun, freedmIPCMessageWriter
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
@@ -82,7 +82,7 @@ class IPCSocketServer(BlockingContextManager):
         if not self._server: self.logger('IPC server could not be started')
         return self
         
-    async def __aexit__(self) -> None:
+    async def __aexit__(self, *args) -> None:
         '''
         Cancel all pending connections in the connection pool
         '''
@@ -216,47 +216,61 @@ class IPCSocketServer(BlockingContextManager):
         '''
         Handle the connection and listen for incoming messages until we receive an EOF.
         '''
-        # Authenticate
-        auth = await self.authenticateConnection(connection)
-        if auth:
-            self.logger.debug('IPC connection was successfully authenticated')
-        else:
-            await self.rejectConnection(connection, 'Could not authenticate')
-            return
-        
-        # Read data depending on the connection type and handle it
-        chunks = 0
-        while not connection.reader.at_eof():
-            # Update the connection
-            connection.state['updated'] = time.time()
-            # Read up to the limit or as many chunks until the limit
-            try:
-                if self.chunksize:
-                    if self.limit and self.limit - chunks * self.chunksize < self.chunksize:
-                        break
-                    raw = await connection.reader.read(self.chunksize)
-                    chunks += 1
-                else:
-                    raw = await connection.reader.read(self.limit or -1)
-            except asyncio.CancelledError:
-                # We exit and can return as the connection closing is handled in __aexit__
+        try:
+            # Authenticate
+            auth = await self.authenticateConnection(connection)
+            if auth:
+                self.logger.debug('IPC connection was successfully authenticated')
+            else:
+                await self.rejectConnection(connection, 'Could not authenticate')
                 return
-            except Exception as e:
-                # TODO: Don't raise an error or self.closeConnection
-                await self.closeConnection(connection)
-                raise freedmIPCMessageReader(e)
-            # Handle the received message or message fragment
-            if not len(raw) == 0:
-                message = Message(
-                    data=raw,
-                    sender=connection
-                    )
+            
+            # Read data depending on the connection type and handle it
+            chunks = 0
+            chunksize = self.chunksize
+            while not connection.reader.at_eof():
                 try:
-                    await self.handleMessage(message)
+                    # Update the connection
+                    connection.state['updated'] = time.time()
+                    
+                    # Read up to the limit or as many chunks until the limit
+                    if self.chunksize:
+                        # Make sure we read as many chunks till reaching the limit
+                        if self.limit:
+                            chunksize = min(self.limit, self.chunksize)
+                            consumed = chunks * self.chunksize
+                            rest = self.limit - consumed
+                            if self.limit == chunksize and chunks > 0:
+                                break
+                            if rest <= 0:
+                                break
+                            chunksize = chunksize if rest > chunksize else rest
+                        raw = await connection.reader.read(chunksize)
+                        chunks += 1
+                    else:
+                        raw = await connection.reader.read(self.limit or -1)
+                    
+                    # Handle the received message or message fragment
+                    if not len(raw) == 0:
+                        message = Message(
+                            data=raw,
+                            sender=connection
+                            )
+                        await self.handleMessage(message)
+                except asyncio.CancelledError:
+                    # We exit and can return as the connection closing is handled by self.close()
+                    return
                 except Exception as e:
-                    # TODO: Don't raise an error or self.closeConnection
-                    # self.closeConnection(connection)
-                    raise freedmIPCMessageHandler(e)
+                    self.logger.error(f'IPC connection error ({e})')
+                    
+        except asyncio.CancelledError:
+            # We exit and can return as the connection closing is handled by self.close()
+            return
+        except ConnectionError as e:
+            self.logger.error(f'IPC connection failed ({e})')
+            return
+        except Exception as e:
+            self.logger.error(f'IPC connection error ({e})')
         
         # Close the connection (It will be automatically removed from the pool)
         await self.closeConnection(connection)
@@ -298,7 +312,7 @@ class IPCSocketServer(BlockingContextManager):
                     )
                 return all(not isinstance(success, Exception) for success in dispatch_report)
         except asyncio.CancelledError:
-            pass
+            return
         
     async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
         try:

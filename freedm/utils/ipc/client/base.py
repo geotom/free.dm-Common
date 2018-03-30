@@ -3,7 +3,6 @@ This module defines the base IPC server.
 Subclass from this class to create a custom IPC server implementation.
 @author: Thomas Wanderer
 '''
-from rpyc.utils.helpers import async
 
 try:
     # Imports
@@ -102,8 +101,13 @@ class IPCSocketClient(BlockingContextManager):
         # Cancel the handler  
         if handler: handler.cancel()
             
-        # Close the connection
-        if connection: await self.closeConnection(connection)
+        # Inform server of disconnection and cancel read/write handlers
+        if connection:
+            await self.closeConnection(connection)
+            for reader in connection.read_handlers:
+                reader.cancel()
+            for writer in connection.write_handlers:
+                writer.cancel()
             
         # Call post shutdown procedure
         await self._post_disconnect(connection)
@@ -137,6 +141,8 @@ class IPCSocketClient(BlockingContextManager):
             server_address=None,
             reader=reader,
             writer=writer,
+            read_handlers=set(),
+            write_handlers=set(),
             state={
                 'mode': self.mode or ConnectionType.PERSISTENT,
                 'created': time.time(),
@@ -223,7 +229,7 @@ class IPCSocketClient(BlockingContextManager):
         try:
             # Read data depending on the connection type and handle it
             chunks = 0
-            chunksize = self.chunksize
+            chunksize = self.chunksize       
             while not connection.reader.at_eof():
                 try:
                     # Update the connection
@@ -246,21 +252,21 @@ class IPCSocketClient(BlockingContextManager):
                     else:
                         raw = await connection.reader.read(self.limit or -1)
                     
-                    # Handle the received message or message fragment
+                    # Handle the received message or message fragment by a new non-blocking task
                     if not len(raw) == 0:
                         message = Message(
                             data=raw,
                             sender=connection
                             )
-                        
-                        print('SCHAUEN, DASS DIE AUCH GECANCELED WERDEN. MIT ADD DONE CALLBACK')
-                        
-                        handler = asyncio.ensure_future(self.handleMessage(message))
-                except asyncio.CancelledError as e:
+                        # Never launch another message handler while we're being disconnected (this task getting cancelled)
+                        if self._handler and not self._handler.done():
+                            reader = asyncio.ensure_future(self.handleMessage(message))
+                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task))
+                            connection.read_handlers.add(reader)
+                except asyncio.CancelledError:
                     pass
                 except Exception as e:
                     self.logger.error(f'IPC connection error ({e})')
-                    
         except asyncio.CancelledError:
             pass
         except ConnectionError as e:
@@ -275,27 +281,38 @@ class IPCSocketClient(BlockingContextManager):
         '''
         A template function that should be overwritten by any subclass if required.
         '''
-#         await asyncio.sleep(1)
-        import time
-#         time.sleep(4)
-        self.logger.debug(f'IPC client received: {message.data.decode()}')
-        await asyncio.sleep(2)
-        #await self.sendMessage('PONG' if message.data.decode() == 'PING' else message.data.decode(), message.sender)          
-#         
-#         SOlLEN BEI WITH ASYNC gleich Connection auf Ephemeral gesetzt werden?
-#          
-#         Einen Incoming Listener implementieren
-#         
-#         Send message implementieren
+        try:
+            self.logger.debug(f'IPC client received: {message.data.decode()}')
+            await asyncio.sleep(3)
+        except asyncio.CancelledError:
+            pass
+        
+        
+        '''
+        TODO:
+        
+        - Hier schauen, ob ein Protokoll gesetzt ist, und dessen methode aufrufen, oder eben nichts machen
+        - Was ist mit EPHEMERA CONNECTIONS oder brauchen wir das nicht?
+        '''
 
-    async def sendMessage(self, message: Union[str, int, float]) -> bool:
+
+    async def sendMessage(self, message: Union[str, int, float], blocking: bool=False) -> bool:
         '''
         Send a message to either one or more connections
+        This function by default is a fire & forget method, but when set
+        to `blocking=True` waits if the message could be dispatched to the
+        recipient.
         '''
         
-        # TODO. Es gibt ja nur eine Connection zum senden, anders als beim SERVER
+        '''
+        TODO:
         
-        # TODO: Should we also cancel active sendMessage coroutines?
+        - Es gibt ja nur eine Connection zum senden, anders als beim SERVER
+        - Send Message so bauen, das sie blocking ist oder nicht.
+        - Aktive Send Coroutinen müssen cancelbar sein, falls wir herunterfahren und noch warten bis alles gesendet ist
+        -Macht Ephemeral hier eigentlich Sinn oder nicht?
+        
+        '''
         
         pass
         
@@ -313,9 +330,6 @@ class IPCSocketClient(BlockingContextManager):
 #             except Exception as e:
 #                 raise freedmIPCMessageWriter(e)
 #             
-            
-        # TODO: Macht Ephemeral hier eigentlich Sinn oder nicht?
-        
         # In case this is an ephemeral connection, close it immediately after sending this message
 #         if c.state['mode'] == ConnectionType.EPHEMERAL:
 #             await self.close()

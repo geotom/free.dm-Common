@@ -93,6 +93,8 @@ class UXDSocketServer(IPCSocketServer):
             server_address=None,
             reader=reader,
             writer=writer,
+            read_handlers=set(),
+            write_handlers=set(),
             state={
                 'mode': self.mode or ConnectionType.PERSISTENT,
                 'created': time.time(),

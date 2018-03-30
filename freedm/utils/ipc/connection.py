@@ -99,6 +99,8 @@ Connection = namedtuple('Connection',
     server_address
     reader
     writer
+    read_handlers
+    write_handlers
     state
     '''
     )

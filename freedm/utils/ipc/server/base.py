@@ -3,13 +3,12 @@ This module defines the base IPC server.
 Subclass from this class to create a custom IPC server implementation.
 @author: Thomas Wanderer
 '''
-from mypy.types import Instance
 
 try:
     # Imports
     import asyncio
     import time
-    from typing import Union, Type, Optional, Set, TypeVar, Iterable, Any
+    from typing import Union, Type, Optional, TypeVar, Iterable, Any
     
     # free.dm Imports
     from freedm.utils.async import BlockingContextManager
@@ -45,6 +44,9 @@ class IPCSocketServer(BlockingContextManager):
     
     # A register for active client connections
     _connection_pool: ConnectionPool=None
+    
+    # A state flag
+    _shutdown = False
     
     def __init__(
             self,
@@ -86,6 +88,9 @@ class IPCSocketServer(BlockingContextManager):
         '''
         Cancel all pending connections in the connection pool
         '''
+        # Set shutdown flag
+        self._shutdown = True
+        
         # Call pre-shutdown procedure
         await self._pre_shutdown()
         
@@ -93,15 +98,22 @@ class IPCSocketServer(BlockingContextManager):
         for connection in self._connection_pool:
             connection.cancel()
             
-        # TODO: Should we also cancel active sendMessage coroutines?
-        
-        # Inform active clients of exit
+        # Inform active clients of shutdown and cancel read/write handlers
         try:
+            connections = self._connection_pool.getConnections()
             asyncio.wait(
-                [await self.closeConnection(c) for c in self._connection_pool.getConnections()],
-                timeout=3,
+                [await self.closeConnection(c) for c in connections],
+                timeout=None,
                 loop=self.loop
                 )
+            for c in connections:
+                print('>>> ACTIVE=', len(c.read_handlers), len(c.write_handlers))
+                for reader in c.read_handlers:
+                    print('CANCELING CONECTIONR READER')
+                    reader.cancel()
+                for writer in c.write_handlers:
+                    print('CANCELING CONNECTION WRITER')
+                    writer.cancel()
         except:
             pass
         
@@ -140,6 +152,8 @@ class IPCSocketServer(BlockingContextManager):
             server_address=None,
             reader=reader,
             writer=writer,
+            read_handlers=set(),
+            write_handlers=set(),
             state={
                 'mode': self.mode or ConnectionType.PERSISTENT,
                 'created': time.time(),
@@ -224,7 +238,7 @@ class IPCSocketServer(BlockingContextManager):
             else:
                 await self.rejectConnection(connection, 'Could not authenticate')
                 return
-            
+                        
             # Read data depending on the connection type and handle it
             chunks = 0
             chunksize = self.chunksize
@@ -256,16 +270,19 @@ class IPCSocketServer(BlockingContextManager):
                             data=raw,
                             sender=connection
                             )
-                        await self.handleMessage(message)
+                        # Never launch another message handler while we're being shutdown (this task getting cancelled)
+                        if not self._shutdown:
+                            reader = asyncio.ensure_future(self.handleMessage(message))
+                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task))
+                            connection.read_handlers.add(reader)
+                            
                 except asyncio.CancelledError:
-                    # We exit and can return as the connection closing is handled by self.close()
-                    return
+                    return # We return as the connection closing is handled by self.close()
                 except Exception as e:
                     self.logger.error(f'IPC connection error ({e})')
                     
         except asyncio.CancelledError:
-            # We exit and can return as the connection closing is handled by self.close()
-            return
+            return # We return as the connection closing is handled by self.close()
         except ConnectionError as e:
             self.logger.error(f'IPC connection failed ({e})')
             return
@@ -288,9 +305,12 @@ class IPCSocketServer(BlockingContextManager):
         self.logger.debug(f'IPC server received: {message.data.decode()}')
         await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)
         
-    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None) -> bool:
+    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
         '''
-        Send a message to either one or more connections
+        Send a message to either one or more connections.
+        This function by default is a fire & forget method, but when set
+        to `blocking=True` waits if the message could be dispatched to all
+        recipients.
         '''
         try:
             # Get affected connections
@@ -303,16 +323,32 @@ class IPCSocketServer(BlockingContextManager):
             if self.limit and len(message) > self.limit:
                 raise freedmIPCMessageLimitOverrun()
             
-            # Dispatch message to affected connections
-            if len(connections) > 0:                
-                dispatch_report = await asyncio.gather(
+            # Dispatch message to affected connections as long as we're not shutting down
+            if len(connections) > 0 and not self._shutdown:                
+                writer = asyncio.gather(
                     *[self._dispatchMessage(message, c) for c in connections],
                     loop=self.loop,
                     return_exceptions=True
                     )
-                return all(not isinstance(success, Exception) for success in dispatch_report)
+                for c in connections:
+                    print('Adding WRITER to CONNECTION', c)
+                    writer.add_done_callback(lambda task: c.write_handlers.remove(task))
+                    c.write_handlers.add(writer)
+                    print(c.write_handlers)
+                if not blocking:
+                    print('RETURING IMMEDIATELY')
+                    return True
+                else:
+                    print('WAITING FOR WRITER')
+                    await writer
+                    return all(not isinstance(success, Exception) for success in writer)
+            else:
+                return False
         except asyncio.CancelledError:
-            return
+            print(6666)
+            return False
+        except:
+            return False
         
     async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
         try:
@@ -320,6 +356,10 @@ class IPCSocketServer(BlockingContextManager):
                 # Dispatch message
                 connection.writer.write(message)
                 await connection.writer.drain()
+                
+                print('DISPATCHING')
+                await asyncio.sleep(5)
+                
                 # Close an ephemeral connection, immediately after sending the message
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:
                     await self.closeConnection(connection)

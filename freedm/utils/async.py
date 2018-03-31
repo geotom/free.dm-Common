@@ -33,6 +33,7 @@ def getLoop(policy: Optional[Type[asyncio.AbstractEventLoopPolicy]]=None) -> asy
     :rtype: asyncio.AbstractEventLoop
     '''
     try:
+        preferred_policy = asyncio.get_event_loop_policy()
         if isinstance(policy, asyncio.AbstractEventLoopPolicy):
             preferred_policy = policy
         elif uvloop:

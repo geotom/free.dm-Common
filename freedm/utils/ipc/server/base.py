@@ -8,6 +8,7 @@ try:
     # Imports
     import asyncio
     import time
+    import functools
     from typing import Union, Type, Optional, TypeVar, Iterable, Any
     
     # free.dm Imports
@@ -98,7 +99,7 @@ class IPCSocketServer(BlockingContextManager):
         for connection in self._connection_pool:
             connection.cancel()
             
-        # Inform active clients of shutdown and cancel read/write handlers
+        # Inform active clients of shutdown and cancel their active read/write handlers
         try:
             connections = self._connection_pool.getConnections()
             asyncio.wait(
@@ -106,16 +107,36 @@ class IPCSocketServer(BlockingContextManager):
                 timeout=None,
                 loop=self.loop
                 )
-            for c in connections:
-                print('>>> ACTIVE=', len(c.read_handlers), len(c.write_handlers))
-                for reader in c.read_handlers:
-                    print('CANCELING CONECTIONR READER')
-                    reader.cancel()
-                for writer in c.write_handlers:
-                    print('CANCELING CONNECTION WRITER')
-                    writer.cancel()
-        except:
-            pass
+        
+            async def cancel_connection_handlers(connection: Connection) -> None:
+                for reader in connection.read_handlers:
+                    try:
+                        if not reader.done():
+                            print('CANCELING CONECTIONR READER')
+                            reader.cancel()
+                    except Exception as e:
+                        print('READER ERROR', e)
+                for writer in connection.write_handlers:
+                    try:
+                        if not writer.done():
+                            print('CANCELING CONNECTION WRITER')
+                            writer.cancel()
+                        else:
+                            print('IST DOCH SCHON GECANCELD ??? !!!')
+                    except Exception as e:
+                        print('WRITER ERROR', e)
+            
+            print('==> ClOSING NOW CONNECTION Read/Write HANDLERS')
+            
+            asyncio.wait(
+                [await cancel_connection_handlers(c) for c in connections],
+                timeout=None,
+                loop=self.loop
+                )
+                
+            print('==> CANCELATION DONE')
+        except Exception as e:
+            print('==> CANCELATION ERROR:',e)
         
         # Close the server
         try:
@@ -330,24 +351,38 @@ class IPCSocketServer(BlockingContextManager):
                     loop=self.loop,
                     return_exceptions=True
                     )
+                
+                # Adding as many callbacks as connections, so the future (writer) gets removed from all connections
                 for c in connections:
-                    print('Adding WRITER to CONNECTION', c)
-                    writer.add_done_callback(lambda task: c.write_handlers.remove(task))
+                    def cancel_writer(connection, writer):
+                        print('------> CALLBACK')
+                        try:
+                            connection.write_handlers.remove(writer)
+                        except Exception as e:
+                            print('CALLBACK ERROR', e)
+                    writer.add_done_callback(functools.partial(cancel_writer, c))
                     c.write_handlers.add(writer)
-                    print(c.write_handlers)
+                    
                 if not blocking:
-                    print('RETURING IMMEDIATELY')
+                    print('<- RETURING IMMEDIATELY')
                     return True
                 else:
-                    print('WAITING FOR WRITER')
+                    #PROBLEM HIER IST; DASS ANSCHEINED DAS DIESE FUNCTION EXTERN AUFGRUFEN WIRD UND NICHT
+                    #GECANCELLED WIRD; ODER? BEI NON-BLOCKING IST ES KEIN PROBLEM
+                    print('...WAITING FOR WRITER')
+                    for c in connections:
+                        print(len(c.write_handlers))
                     await writer
                     return all(not isinstance(success, Exception) for success in writer)
+                    
+                    # ODER for response in await writer:
+                
             else:
                 return False
         except asyncio.CancelledError:
-            print(6666)
             return False
-        except:
+        except Exception as e:
+            print(e)
             return False
         
     async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
@@ -368,9 +403,11 @@ class IPCSocketServer(BlockingContextManager):
             else:
                 raise freedmIPCMessageWriter(e)   
         except asyncio.CancelledError:
+            print('Im a writer and got CANCELLED')
             return
         except Exception as e:
-            raise freedmIPCMessageWriter(e)
+            print('KACKE PASSIERT BEIM DISPATCHEN!', type(e), e)
+            return freedmIPCMessageWriter(e)
     
     async def close(self) -> None:
         '''

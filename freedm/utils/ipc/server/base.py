@@ -110,43 +110,27 @@ class IPCSocketServer(BlockingContextManager):
         
             async def cancel_connection_handlers(connection: Connection) -> None:
                 for reader in connection.read_handlers:
-                    try:
-                        if not reader.done():
-                            print('CANCELING CONECTIONR READER')
-                            reader.cancel()
-                    except Exception as e:
-                        print('READER ERROR', e)
+                    if not reader.done(): reader.cancel()
                 for writer in connection.write_handlers:
-                    try:
-                        if not writer.done():
-                            print('CANCELING CONNECTION WRITER')
-                            writer.cancel()
-                        else:
-                            print('IST DOCH SCHON GECANCELD ??? !!!')
-                    except Exception as e:
-                        print('WRITER ERROR', e)
-            
-            print('==> ClOSING NOW CONNECTION Read/Write HANDLERS')
+                    if not writer.done(): writer.cancel()
             
             asyncio.wait(
                 [await cancel_connection_handlers(c) for c in connections],
                 timeout=None,
                 loop=self.loop
                 )
-                
-            print('==> CANCELATION DONE')
         except Exception as e:
-            print('==> CANCELATION ERROR:',e)
+            self.logger.error(f'Problem shutting down IPC server gracefully ({e})')
         
         # Close the server
         try:
             self._server.close()
         except Exception as e:
-            self.logger.error('Cannot close IPC UXD socket server', self._server, e)
+            self.logger.error(f'Cannot shutdown IPC server ({e})')
         try:   
             await self._server.wait_closed()
         except Exception as e:
-            self.logger.error('Could not wait until IPC UXD server closed', self._server, e)    
+            self.logger.error(f'Could not wait until IPC server shutdown ({e})')    
         
         # Call post-shutdown procedure
         await self._post_shutdown()
@@ -294,7 +278,7 @@ class IPCSocketServer(BlockingContextManager):
                         # Never launch another message handler while we're being shutdown (this task getting cancelled)
                         if not self._shutdown:
                             reader = asyncio.ensure_future(self.handleMessage(message))
-                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task))
+                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                             
                 except asyncio.CancelledError:
@@ -353,36 +337,24 @@ class IPCSocketServer(BlockingContextManager):
                     )
                 
                 # Adding as many callbacks as connections, so the future (writer) gets removed from all connections
+                def cancel_writer(connection, writer):
+                    try:
+                        connection.write_handlers.remove(writer)
+                    except:
+                        pass
                 for c in connections:
-                    def cancel_writer(connection, writer):
-                        print('------> CALLBACK')
-                        try:
-                            connection.write_handlers.remove(writer)
-                        except Exception as e:
-                            print('CALLBACK ERROR', e)
                     writer.add_done_callback(functools.partial(cancel_writer, c))
                     c.write_handlers.add(writer)
-                    
+                
+                # Return behavior
                 if not blocking:
-                    print('<- RETURING IMMEDIATELY')
                     return True
                 else:
-                    #PROBLEM HIER IST; DASS ANSCHEINED DAS DIESE FUNCTION EXTERN AUFGRUFEN WIRD UND NICHT
-                    #GECANCELLED WIRD; ODER? BEI NON-BLOCKING IST ES KEIN PROBLEM
-                    print('...WAITING FOR WRITER')
-                    for c in connections:
-                        print(len(c.write_handlers))
                     await writer
-                    return all(not isinstance(success, Exception) for success in writer)
-                    
-                    # ODER for response in await writer:
-                
+                    return all(not isinstance(success, Exception) for success in writer.result())
             else:
                 return False
-        except asyncio.CancelledError:
-            return False
-        except Exception as e:
-            print(e)
+        except:
             return False
         
     async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
@@ -393,7 +365,7 @@ class IPCSocketServer(BlockingContextManager):
                 await connection.writer.drain()
                 
                 print('DISPATCHING')
-                await asyncio.sleep(5)
+                await asyncio.sleep(3)
                 
                 # Close an ephemeral connection, immediately after sending the message
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:
@@ -402,11 +374,7 @@ class IPCSocketServer(BlockingContextManager):
                 return True
             else:
                 raise freedmIPCMessageWriter(e)   
-        except asyncio.CancelledError:
-            print('Im a writer and got CANCELLED')
-            return
         except Exception as e:
-            print('KACKE PASSIERT BEIM DISPATCHEN!', type(e), e)
             return freedmIPCMessageWriter(e)
     
     async def close(self) -> None:

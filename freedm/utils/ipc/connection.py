@@ -41,47 +41,47 @@ class ConnectionPool(set):
         '''
         return False if not self.max else self.max <= len(self)
     
-    def getConnectionForHandler(self, handler: Task) -> List[C]:
-        '''
-        Return the connection for a specific connection handler
-        '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self if handler is c][0]
-    
     def getConnections(self) -> List[C]:
         '''
         Return active connections
         '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self]
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if c._coro.cr_frame]
+    
+    def getConnectionForHandler(self, handler: Task) -> List[C]:
+        '''
+        Return the connection for a specific connection handler
+        '''
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if handler is c and c._coro.cr_frame][0]
     
     def getConnectionsByAddress(self, address: str) -> List[C]:
         '''
         Return active connections from the specified address
         '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.client_address == address]
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.client_address == address and c._coro.cr_frame]
     
     def getConnectionsByUser(self, uid: int) -> List[C]:
         '''
         Return active connections from the specified user ID
         '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.uid == uid]
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.uid == uid and c._coro.cr_frame]
     
     def getConnectionsByGroup(self, gid: int) -> List[C]:
         '''
         Return active connections from the specified group ID
         '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.gid == gid]
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.gid == gid and c._coro.cr_frame]
     
     def getConnectionsByProcess(self, pid: int) -> List[C]:
         '''
         Return active connections from the specified process ID
         '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.pid == pid]
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.pid == pid and c._coro.cr_frame]
 
     def getIdleConnectionsSince(self, period: int) -> List[C]:
         '''
         Return active connections idling longer then the specified period in seconds
         '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self if period <= timedelta(seconds=float(time.time() - c.state['update']))]
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if period <= timedelta(seconds=float(time.time() - c.state['update'])) and c._coro.cr_frame]
                 
                 
 class ConnectionType(Enum):

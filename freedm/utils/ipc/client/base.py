@@ -261,7 +261,7 @@ class IPCSocketClient(BlockingContextManager):
                         # Never launch another message handler while we're being disconnected (this task getting cancelled)
                         if self._handler and not self._handler.done():
                             reader = asyncio.ensure_future(self.handleMessage(message))
-                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task))
+                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                 except asyncio.CancelledError:
                     pass

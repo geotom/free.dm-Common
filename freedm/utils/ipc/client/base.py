@@ -87,8 +87,6 @@ class IPCSocketClient(BlockingContextManager):
         '''
         if not self.connected(): return
         
-        print('CLOSING NOW via __AEXIT__!!!!')
-        
         # Set internals to None again
         handler = self._handler
         connection = self._connection
@@ -157,7 +155,6 @@ class IPCSocketClient(BlockingContextManager):
         Acknowledge or inform client about EOF, then close
         '''
         if not connection.writer.transport.is_closing():
-            print('CLOSING CONNECTION!!!')
             try:
                 if connection.reader.at_eof():
                     self.logger.debug('IPC connection closed by server')
@@ -262,9 +259,9 @@ class IPCSocketClient(BlockingContextManager):
                             sender=connection
                             )
                         # Never launch another message handler while we're being disconnected (this task getting cancelled)
-                        if self._handler and not self._handler.done():
+                        if (self._handler and not self._handler.done()) and not connection.state['closed']:
                             reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
-                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if task in connection.read_handlers else None)
+                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if connection.read_handlers and task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                 except asyncio.CancelledError:
                     pass
@@ -286,7 +283,11 @@ class IPCSocketClient(BlockingContextManager):
         '''
         try:
             self.logger.debug(f'IPC client received: {message.data.decode()}')
-            await asyncio.sleep(3)
+            await asyncio.sleep(1.3)
+            
+            if message.data.decode() == 'PING':
+                await self.sendMessage(message='PONG', blocking=False)
+            
         except asyncio.CancelledError:
             pass
         
@@ -295,7 +296,7 @@ class IPCSocketClient(BlockingContextManager):
         TODO:
         
         - Hier schauen, ob ein Protokoll gesetzt ist, und dessen methode aufrufen, oder eben nichts machen
-        - Was ist mit EPHEMERA CONNECTIONS oder brauchen wir das nicht?
+        - Was ist mit EPHEMERAL CONNECTIONS oder brauchen wir das nicht?
         '''
 
 
@@ -308,17 +309,6 @@ class IPCSocketClient(BlockingContextManager):
         telling if the message could be successfully written to (not received by) 
         the client(s)
         '''
-        
-        '''
-        TODO:
-        
-        - Es gibt ja nur eine Connection zum senden, anders als beim SERVER
-        - Send Message so bauen, das sie blocking ist oder nicht.
-        - Aktive Send Coroutinen müssen cancelbar sein, falls wir herunterfahren und noch warten bis alles gesendet ist
-        -Macht Ephemeral hier eigentlich Sinn oder nicht?
-        
-        '''
-        
         try:
             # Encode and check message
             message = str(message).encode()
@@ -328,10 +318,10 @@ class IPCSocketClient(BlockingContextManager):
                 raise freedmIPCMessageLimitOverrun()
             
             # Dispatch message as long as not we're being disconnected (this task getting cancelled)
-            if self._connection and not self._handler.done():
+            if (self._connection and not self._handler.done()) and not self._connection.state['closed']:
                 # Dispatch and store future with a callback
                 writer = asyncio.ensure_future(self._dispatchMessage(message, self._connection), loop=self.loop)
-                writer.add_done_callback(lambda task: self._connection.write_handlers.remove(task) if task in self._connection.write_handlers else None)
+                writer.add_done_callback(lambda task: self._connection.write_handlers.remove(task) if self._connection and task in self._connection.write_handlers else None)
                 self._connection.write_handlers.add(writer)
                 
                 # Return behavior
@@ -342,7 +332,6 @@ class IPCSocketClient(BlockingContextManager):
                     print('WAS IST DAS RESULT VOMN WRITER???')
                     print(writer.result())
                     return True if writer.result() else False
-                
             else:
                 return False
         except:
@@ -359,10 +348,15 @@ class IPCSocketClient(BlockingContextManager):
                 connection.writer.write(message)
                 await connection.writer.drain()
                 
-                print('DISPATCHING')
-                await asyncio.sleep(3)
+                await asyncio.sleep(.5)
                 
                 # Close an ephemeral connection, immediately after sending the message
+                '''
+                TODO:
+                
+                -Macht Ephemeral hier eigentlich Sinn oder nicht? ????????????????????????????????????????
+                
+                '''
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:
                     await self.closeConnection(connection)
                 # Return result

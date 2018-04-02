@@ -198,6 +198,7 @@ class IPCSocketServer(BlockingContextManager):
         Acknowledge or inform client about EOF, then close
         '''
         connection.state['closed'] = time.time()
+        print(connection.state['closed'])
         if not connection.writer.transport.is_closing():
             if connection.reader.at_eof():
                 self.logger.debug('IPC connection closed by client')
@@ -260,8 +261,10 @@ class IPCSocketServer(BlockingContextManager):
                             consumed = chunks * self.chunksize
                             rest = self.limit - consumed
                             if self.limit == chunksize and chunks > 0:
+                                self.logger.error(f'IPC connection limit is smaller than chunksize. Closing connection.')
                                 break
                             if rest <= 0:
+                                self.logger.debug(f'IPC connection limit "{self.limit}" reached. Closing connection.')
                                 break
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
@@ -276,11 +279,10 @@ class IPCSocketServer(BlockingContextManager):
                             sender=connection
                             )
                         # Never launch another message handler while we're being shutdown (this task getting cancelled)
-                        if not self._shutdown:
+                        if not self._shutdown and not connection.state['closed']:
                             reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
-                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if task in connection.read_handlers else None)
+                            reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if connection.read_handlers and task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
-                            
                 except asyncio.CancelledError:
                     return # We return as the connection closing is handled by self.close()
                 except Exception as e:
@@ -307,8 +309,8 @@ class IPCSocketServer(BlockingContextManager):
         '''
         A template function that should be overwritten by any subclass if required
         '''
-        self.logger.debug(f'IPC server received: {message.data.decode()}')
-        await self.sendMessage('Pong' if message.data.decode() == 'Ping' else message.data.decode(), message.sender)
+        self.logger.debug(f'IPC server received: {message.data.decode()} ({time.time()})')
+        await self.sendMessage('PONG' if message.data.decode() == 'PING' else message.data.decode(), message.sender)
         
     async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
         '''
@@ -321,7 +323,8 @@ class IPCSocketServer(BlockingContextManager):
         '''
         try:
             # Get affected connections
-            connections = [connection] if not checker.isIterable(connection) else connection
+            affected = [connection] if not checker.isIterable(connection) else connection
+            connections = [c for c in affected if not c.state['closed']]
     
             # Encode and check message
             message = str(message).encode()
@@ -330,8 +333,9 @@ class IPCSocketServer(BlockingContextManager):
             if self.limit and len(message) > self.limit:
                 raise freedmIPCMessageLimitOverrun()
             
+            
             # Dispatch message to affected connections as long as we're not shutting down
-            if len(connections) > 0 and not self._shutdown:                
+            if len(connections) > 0 and not self._shutdown:
                 writer = asyncio.gather(
                     *[self._dispatchMessage(message, c) for c in connections],
                     loop=self.loop,
@@ -370,8 +374,8 @@ class IPCSocketServer(BlockingContextManager):
                 connection.writer.write(message)
                 await connection.writer.drain()
                 
-                print('DISPATCHING')
-                await asyncio.sleep(3)
+                #print(' -> Dispatch')
+                await asyncio.sleep(2)
                 
                 # Close an ephemeral connection, immediately after sending the message
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:

@@ -184,12 +184,15 @@ class IPCSocketClient(BlockingContextManager):
         try:
             if not self.timeout:
                 self._handler = asyncio.ensure_future(
-                    self._handleConnection(self._connection), loop=self.loop
+                    self._handleConnection(self._connection),
+                    loop=self.loop
                     )
             else:
                 self._handler = asyncio.ensure_future(
                     asyncio.wait_for(
-                        self._handleConnection(self._connection), self.timeout, loop=self.loop
+                        self._handleConnection(self._connection),
+                        self.timeout,
+                        loop=self.loop
                         )
                 )
         except Exception as e:
@@ -260,7 +263,7 @@ class IPCSocketClient(BlockingContextManager):
                             )
                         # Never launch another message handler while we're being disconnected (this task getting cancelled)
                         if self._handler and not self._handler.done():
-                            reader = asyncio.ensure_future(self.handleMessage(message))
+                            reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
                             reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                 except asyncio.CancelledError:
@@ -301,7 +304,9 @@ class IPCSocketClient(BlockingContextManager):
         Send a message to either one or more connections
         This function by default is a fire & forget method, but when set
         to `blocking=True` waits if the message could be dispatched to the
-        recipient.
+        recipient. Only the latter returns a real (boolean) result, 
+        telling if the message could be successfully written to (not received by) 
+        the client(s)
         '''
         
         '''
@@ -314,25 +319,58 @@ class IPCSocketClient(BlockingContextManager):
         
         '''
         
-        pass
-        
-#         for c in [[connection] if not checker.isIterable(connection) else connection]:
-#             # Write message to socket if size is met and connection not closed
-#             try:
-#                 message = str(message).encode()
-#                 if len(message) == 0:
-#                     return
-#                 if self.limit and len(message) > self.limit:
-#                     raise freedmIPCMessageLimitOverrun()
-#                 if not c.writer.transport.is_closing():
-#                     c.writer.write(message)
-#                     await c.writer.drain()
-#             except Exception as e:
-#                 raise freedmIPCMessageWriter(e)
-#             
-        # In case this is an ephemeral connection, close it immediately after sending this message
-#         if c.state['mode'] == ConnectionType.EPHEMERAL:
-#             await self.close()
+        try:
+            # Encode and check message
+            message = str(message).encode()
+            if len(message) == 0:
+                return False
+            if self.limit and len(message) > self.limit:
+                raise freedmIPCMessageLimitOverrun()
+            
+            # Dispatch message as long as not we're being disconnected (this task getting cancelled)
+            if self._connection and not self._handler.done():
+                # Dispatch and store future with a callback
+                writer = asyncio.ensure_future(self._dispatchMessage(message, self._connection), loop=self.loop)
+                writer.add_done_callback(lambda task: self._connection.write_handlers.remove(task) if task in self._connection.write_handlers else None)
+                self._connection.write_handlers.add(writer)
+                
+                # Return behavior
+                if not blocking:
+                    return True
+                else:
+                    await writer
+                    print('WAS IST DAS RESULT VOMN WRITER???')
+                    print(writer.result())
+                    return True if writer.result() else False
+                
+            else:
+                return False
+        except:
+            return False
+
+    async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
+        '''
+        The actual coroutine dispatching the message to the connection's socket writer.
+        It might close the connection depending on its mode.
+        '''
+        try:
+            if not connection.writer.transport.is_closing():
+                # Dispatch message
+                connection.writer.write(message)
+                await connection.writer.drain()
+                
+                print('DISPATCHING')
+                await asyncio.sleep(3)
+                
+                # Close an ephemeral connection, immediately after sending the message
+                if connection.state['mode'] == ConnectionType.EPHEMERAL:
+                    await self.closeConnection(connection)
+                # Return result
+                return True
+            else:
+                raise freedmIPCMessageWriter(e)   
+        except Exception as e:
+            return freedmIPCMessageWriter(e)
     
     async def close(self) -> None:
         '''

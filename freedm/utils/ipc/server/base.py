@@ -177,7 +177,7 @@ class IPCSocketServer(BlockingContextManager):
         
         # Check if max connection is not exceeded?
         if self._connection_pool.isFull():
-            session = asyncio.ensure_future(self.rejectConnection(connection, 'Too many connections'))
+            session = asyncio.ensure_future(self.rejectConnection(connection, 'Too many connections'), loop=self.loop)
         else:
             session = asyncio.ensure_future(self._handleConnection(connection), loop=self.loop)
             self._connection_pool.add(session)
@@ -277,7 +277,7 @@ class IPCSocketServer(BlockingContextManager):
                             )
                         # Never launch another message handler while we're being shutdown (this task getting cancelled)
                         if not self._shutdown:
-                            reader = asyncio.ensure_future(self.handleMessage(message))
+                            reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
                             reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                             
@@ -315,7 +315,9 @@ class IPCSocketServer(BlockingContextManager):
         Send a message to either one or more connections.
         This function by default is a fire & forget method, but when set
         to `blocking=True` waits if the message could be dispatched to all
-        recipients.
+        recipients. Only the latter returns a real (boolean) result, 
+        telling if the message could be successfully written to (not received by) 
+        the client(s)
         '''
         try:
             # Get affected connections
@@ -324,7 +326,7 @@ class IPCSocketServer(BlockingContextManager):
             # Encode and check message
             message = str(message).encode()
             if len(message) == 0:
-                return
+                return False
             if self.limit and len(message) > self.limit:
                 raise freedmIPCMessageLimitOverrun()
             
@@ -358,6 +360,10 @@ class IPCSocketServer(BlockingContextManager):
             return False
         
     async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
+        '''
+        The actual coroutine dispatching the message to the connection's socket writer.
+        It might close the connection depending on its mode.
+        '''
         try:
             if not connection.writer.transport.is_closing():
                 # Dispatch message

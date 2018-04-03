@@ -8,13 +8,13 @@ try:
     # Imports
     import asyncio
     import time
-    from typing import TypeVar, Optional, Type, Union, Iterable
+    import textwrap
+    from typing import TypeVar, Optional, Type, Union
     
     # free.dm Imports
     from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
-    from freedm.utils.types import TypeChecker as checker
     from freedm.utils.ipc.message import Message
     from freedm.utils.ipc.protocol import Protocol
     from freedm.utils.ipc.connection import Connection, ConnectionType
@@ -34,6 +34,7 @@ class IPCSocketClient(BlockingContextManager):
     exchange and can be configured with a protocol for advanced IPC communication.
     A client can:
     - Establish ephemeral and persistent (long-living) connections
+    - Limiting amount of data sent or received
     - Read data at once or in chunks
     '''
     
@@ -119,11 +120,10 @@ class IPCSocketClient(BlockingContextManager):
         '''
         return await self.__aenter__()
     
-    def connected(self):
+    def connected(self) -> bool:
         '''
         Checks if the connection is still alive
         '''
-    
         return (self._connection and not self._connection.state['closed'])
     
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
@@ -284,24 +284,13 @@ class IPCSocketClient(BlockingContextManager):
     
     async def handleMessage(self, message: Message) -> None:
         '''
-        A template function that should be overwritten by any subclass if required.
+        This method either handles the message itself when overwritten by a subclass
+        or passes the message to the protocol's handler.
         '''
         try:
-            self.logger.debug(f'IPC client received: {message.data.decode()}')
-            await asyncio.sleep(4)
-            
-            if message.data.decode() == 'PING':
-                await self.sendMessage(message='PONG', blocking=False)
-            
-        except asyncio.CancelledError:
-            pass
-        
-        
-        '''
-        TODO:
-        
-        - Hier schauen, ob ein Protokoll gesetzt ist, und dessen methode aufrufen, oder eben nichts machen
-        '''
+            self.protocol.handleMessage(message)
+        except:
+            self.logger.debug(f'IPC client received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
 
     async def sendMessage(self, message: Union[str, int, float], blocking: bool=False) -> bool:
         '''
@@ -349,13 +338,10 @@ class IPCSocketClient(BlockingContextManager):
                 connection.writer.write(message)
                 await connection.writer.drain()
                 
-                print(' -> Dispatch')
-                from random import randint
-                await asyncio.sleep(randint(0,5))
-                
                 # Close an ephemeral connection, immediately after sending the message
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:
                     await self.closeConnection(connection)
+                
                 # Return result
                 return True
             else:

@@ -8,6 +8,7 @@ try:
     # Imports
     import asyncio
     import time
+    import textwrap
     import functools
     from typing import Union, Type, Optional, TypeVar, Iterable, Any
     
@@ -305,11 +306,14 @@ class IPCSocketServer(BlockingContextManager):
     
     async def handleMessage(self, message: Message) -> None:
         '''
-        A template function that should be overwritten by any subclass if required
+        This method either handles the message itself when overwritten by a subclass
+        or passes the message to the protocol's handler.
         '''
-        self.logger.debug(f'IPC server received: {message.data.decode()} ({time.time()})')
-        await self.sendMessage('PONG' if message.data.decode() == 'PING' else message.data.decode(), message.sender)
-        
+        try:
+            self.protocol.handleMessage(message)
+        except:
+            self.logger.debug(f'IPC server received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
+            
     async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
         '''
         Send a message to either one or more connections.
@@ -372,13 +376,10 @@ class IPCSocketServer(BlockingContextManager):
                 connection.writer.write(message)
                 await connection.writer.drain()
                 
-                print(' -> Dispatch')
-                from random import randint
-                await asyncio.sleep(randint(0,5))
-                
                 # Close an ephemeral connection, immediately after sending the message
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:
                     await self.closeConnection(connection)
+                    
                 # Return result
                 return True
             else:

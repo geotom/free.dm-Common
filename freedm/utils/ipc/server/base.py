@@ -19,7 +19,7 @@ try:
     from freedm.utils.ipc.message import Message
     from freedm.utils.ipc.protocol import Protocol
     from freedm.utils.ipc.connection import Connection, ConnectionType, ConnectionPool
-    from freedm.utils.ipc.exceptions import freedmIPCMessageLimitOverrun, freedmIPCMessageWriter
+    from freedm.utils.ipc.exceptions import freedmIPCMessageLimitOverrun
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
@@ -107,13 +107,11 @@ class IPCSocketServer(BlockingContextManager):
                 timeout=None,
                 loop=self.loop
                 )
-        
             async def cancel_connection_handlers(connection: Connection) -> None:
                 for reader in connection.read_handlers:
                     if not reader.done(): reader.cancel()
                 for writer in connection.write_handlers:
                     if not writer.done(): writer.cancel()
-            
             asyncio.wait(
                 [await cancel_connection_handlers(c) for c in connections],
                 timeout=None,
@@ -189,17 +187,18 @@ class IPCSocketServer(BlockingContextManager):
         A template function for rejecting a connection attempt
         '''
         self.logger.debug(f'-> Rejecting connection ({reason})')
-        if reason: await self.sendMessage(reason, connection)
-        await self.closeConnection(connection)
+        await self.closeConnection(connection, reason=reason)
         
-    async def closeConnection(self, connection: Connection) -> None:
+    async def closeConnection(self, connection: Connection, reason: Optional[str]=None) -> None:
         '''
         End and close an existing connection:
         Acknowledge or inform client about EOF, then close
         '''
         connection.state['closed'] = time.time()
-        print(connection.state['closed'])
         if not connection.writer.transport.is_closing():
+            # Tell client the reason
+            if reason:
+                await self.sendMessage(reason, connection)
             if connection.reader.at_eof():
                 self.logger.debug('IPC connection closed by client')
                 connection.reader.feed_eof()
@@ -287,7 +286,6 @@ class IPCSocketServer(BlockingContextManager):
                     return # We return as the connection closing is handled by self.close()
                 except Exception as e:
                     self.logger.error(f'IPC connection error ({e})')
-                    
         except asyncio.CancelledError:
             return # We return as the connection closing is handled by self.close()
         except ConnectionError as e:
@@ -305,7 +303,7 @@ class IPCSocketServer(BlockingContextManager):
         '''
         return True
     
-    async def handleMessage(self, message: Message):
+    async def handleMessage(self, message: Message) -> None:
         '''
         A template function that should be overwritten by any subclass if required
         '''
@@ -357,7 +355,7 @@ class IPCSocketServer(BlockingContextManager):
                     return True
                 else:
                     await writer
-                    return all(not isinstance(success, Exception) for success in writer.result())
+                    return all(r for r in writer.result())
             else:
                 return False
         except:
@@ -374,8 +372,9 @@ class IPCSocketServer(BlockingContextManager):
                 connection.writer.write(message)
                 await connection.writer.drain()
                 
-                #print(' -> Dispatch')
-                await asyncio.sleep(2)
+                print(' -> Dispatch')
+                from random import randint
+                await asyncio.sleep(randint(0,5))
                 
                 # Close an ephemeral connection, immediately after sending the message
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:
@@ -383,9 +382,9 @@ class IPCSocketServer(BlockingContextManager):
                 # Return result
                 return True
             else:
-                raise freedmIPCMessageWriter(e)   
-        except Exception as e:
-            return freedmIPCMessageWriter(e)
+                return False
+        except:
+            return False
     
     async def close(self) -> None:
         '''

@@ -18,7 +18,7 @@ try:
     from freedm.utils.ipc.message import Message
     from freedm.utils.ipc.protocol import Protocol
     from freedm.utils.ipc.connection import Connection, ConnectionType
-    from freedm.utils.ipc.exceptions import freedmIPCMessageWriter, freedmIPCMessageLimitOverrun
+    from freedm.utils.ipc.exceptions import freedmIPCMessageLimitOverrun
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
@@ -149,12 +149,17 @@ class IPCSocketClient(BlockingContextManager):
                 }
             )
         
-    async def closeConnection(self, connection):
+    async def closeConnection(self, connection: Optional[Connection]=None, reason: Optional[str]=None) -> None:
         '''
         End and close an existing connection:
         Acknowledge or inform client about EOF, then close
         '''
-        if not connection.writer.transport.is_closing():
+        if not connection:
+            connection = self._connection
+        if connection and not connection.writer.transport.is_closing():
+            # Tell server the reason
+            if reason:
+                await self.sendMessage(reason, connection)
             try:
                 if connection.reader.at_eof():
                     self.logger.debug('IPC connection closed by server')
@@ -277,13 +282,13 @@ class IPCSocketClient(BlockingContextManager):
         # Close this connection again
         await self.close()
     
-    async def handleMessage(self, message: Message):
+    async def handleMessage(self, message: Message) -> None:
         '''
         A template function that should be overwritten by any subclass if required.
         '''
         try:
             self.logger.debug(f'IPC client received: {message.data.decode()}')
-            await asyncio.sleep(1.3)
+            await asyncio.sleep(4)
             
             if message.data.decode() == 'PING':
                 await self.sendMessage(message='PONG', blocking=False)
@@ -296,9 +301,7 @@ class IPCSocketClient(BlockingContextManager):
         TODO:
         
         - Hier schauen, ob ein Protokoll gesetzt ist, und dessen methode aufrufen, oder eben nichts machen
-        - Was ist mit EPHEMERAL CONNECTIONS oder brauchen wir das nicht?
         '''
-
 
     async def sendMessage(self, message: Union[str, int, float], blocking: bool=False) -> bool:
         '''
@@ -329,9 +332,7 @@ class IPCSocketClient(BlockingContextManager):
                     return True
                 else:
                     await writer
-                    print('WAS IST DAS RESULT VOMN WRITER???')
-                    print(writer.result())
-                    return True if writer.result() else False
+                    return writer.result()
             else:
                 return False
         except:
@@ -348,23 +349,19 @@ class IPCSocketClient(BlockingContextManager):
                 connection.writer.write(message)
                 await connection.writer.drain()
                 
-                await asyncio.sleep(.5)
+                print(' -> Dispatch')
+                from random import randint
+                await asyncio.sleep(randint(0,5))
                 
                 # Close an ephemeral connection, immediately after sending the message
-                '''
-                TODO:
-                
-                -Macht Ephemeral hier eigentlich Sinn oder nicht? ????????????????????????????????????????
-                
-                '''
                 if connection.state['mode'] == ConnectionType.EPHEMERAL:
                     await self.closeConnection(connection)
                 # Return result
                 return True
             else:
-                raise freedmIPCMessageWriter(e)   
-        except Exception as e:
-            return freedmIPCMessageWriter(e)
+                return False  
+        except:
+            return False
     
     async def close(self) -> None:
         '''

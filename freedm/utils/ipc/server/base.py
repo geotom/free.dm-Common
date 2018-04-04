@@ -83,7 +83,7 @@ class IPCSocketServer(BlockingContextManager):
         self._server = await self._init_server()
 
         # Check & Return self
-        if not self._server: self.logger('IPC server could not be started')
+        if not self._server: self.logger.error('IPC server could not be started')
         return self
         
     async def __aexit__(self, *args) -> None:
@@ -300,9 +300,13 @@ class IPCSocketServer(BlockingContextManager):
             
     async def authenticateConnection(self, connection: Connection) -> bool:
         '''
-        A template function that should be overwritten by any subclass if required
+        This method either authenticates the client itself when overwritten by a subclass
+        or passes the message to the protocol's handler.
         '''
-        return True
+        try:
+            return self.protocol.authenticate(connection)
+        except:
+            return True
     
     async def handleMessage(self, message: Message) -> None:
         '''

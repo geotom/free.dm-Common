@@ -18,6 +18,12 @@ from freedm.utils.exceptions import freedmBaseException
 C = TypeVar('C', bound='Connection')
 
 
+class AddressFamily(Enum):
+    DUAL = 1
+    IPV4 = 2
+    IPV6 = 3
+
+
 class ConnectionPool(set):
     '''
     A set of active client sessions

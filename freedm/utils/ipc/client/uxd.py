@@ -69,9 +69,6 @@ class UXDSocketClient(IPCSocketClient):
             return
                            
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
-        '''
-        Assemble a connection object based on the info we get from the reader/writer
-        '''
         return Connection(
             socket=writer.get_extra_info('socket'),
             pid=os.getpid(),

@@ -124,10 +124,16 @@ class IPCSocketServer(BlockingContextManager):
         # Close the server
         try:
             self._server.close()
+        except AttributeError:
+            for server in self._server:
+                server.close()
         except Exception as e:
             self.logger.error(f'Cannot shutdown IPC server ({e})')
         try:   
             await self._server.wait_closed()
+        except AttributeError:
+            for server in self._server:
+                await server.wait_closed()
         except Exception as e:
             self.logger.error(f'Could not wait until IPC server shutdown ({e})')    
         

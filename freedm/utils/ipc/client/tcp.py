@@ -24,3 +24,9 @@ class TCPSocketClient(IPCSocketClient):
     '''
     An IPC client connecting to IPC servers via an TCP socket.
     '''
+    
+    # For making a connection
+    '''
+    Asking getaddrinfo() About Services
+    https://erlerobotics.gitbooks.io/erle-robotics-python-gitbook-free/socket_names_and_dns/asking_getaddrinfo_about_services.html
+    '''

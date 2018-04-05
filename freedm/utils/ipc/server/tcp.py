@@ -15,7 +15,7 @@ try:
     # free.dm Imports
     from freedm.utils.ipc.server.base import IPCSocketServer
     from freedm.utils.ipc.exceptions import freedmIPCSocketCreation, freedmIPCSocketShutdown
-    from freedm.utils.ipc.connection import Connection, ConnectionType, AddressFamily
+    from freedm.utils.ipc.connection import Connection, ConnectionType, AddressType
     from freedm.utils.ipc.protocol import Protocol
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
@@ -25,13 +25,19 @@ except ImportError as e:
 class TCPSocketServer(IPCSocketServer):
     '''
     An IPC server binding using TCP implemented as async contextmanager.
+    This server supports both IPv4 and IPv6 in the following modes:
+    - IPV4: IPv4 only
+    - IPV6: IPv6 only
+    - DUAL: Binding to an IPv4 and IPv6 address
+    - AUTO: Automatically using the address-families available with a preference for IPv6
+    Alternatively it is possible to provide a pre-created socket. In this case, the address-family is ignored.
     '''
     
     def __init__(
             self,
             address: str=None,
             port: int=None,
-            family: Optional[AddressFamily]=AddressFamily.DUAL,
+            family: Optional[AddressType]=AddressType.AUTO,
             socket: socket.socket=None,
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             limit: Optional[int]=None,
@@ -70,27 +76,59 @@ class TCPSocketServer(IPCSocketServer):
             return False
         
     async def _init_server(self) -> Any:
-        sock = self.socket
-        family = socket.AF_UNSPEC if not self.family else socket.AF_INET6 if self.family != AddressFamily.IPV4 and socket.has_ipv6 else socket.AF_INET
+        # The socket object to bind to
+        sock = [self.socket] if self.socket else None
+        
+        # The address family set or preferred
+        family = socket.AF_UNSPEC if self.family == AddressType.AUTO or self.family == AddressType.DUAL \
+            else socket.AF_INET6 if self.family != AddressType.IPV4 and socket.has_ipv6 else socket.AF_INET
         
         if not sock:
             try:
-                # Get the correct address information and make sure we prefer IPv4 if IPv6 is not supported
-                address_info = socket.getaddrinfo(self.address, self.port, family=family, type=socket.SOCK_STREAM, proto=0, flags=socket.AI_PASSIVE)
-                if not self.supports_dualstack():
-                    address_info.sort(key=lambda x: x[0] == socket.AF_INET, reverse=True)
+                # Get the correct address information for the corresponding family
+                addresses = socket.getaddrinfo(self.address, self.port, family=family, type=socket.SOCK_STREAM, proto=0, flags=socket.AI_PASSIVE+socket.AI_CANONNAME)
+                
+                # Collect addresses we need to bind to based on the specified+supported address families
+                connect_to = []
+                
+                # In case we explicitly want an IPv6 socket
+                if family in (socket.AF_INET, socket.AF_INET6) and len(addresses) > 0:
+                    connect_to.append(addresses[0])
+                
+                # In case we want to auto-detect, we prefer IPv6 over IPv4 if supported and IPv6-address available
+                elif self.family == AddressType.AUTO:
+                    addresses.sort(key=lambda x: x[0] == socket.AF_INET6, reverse=socket.has_ipv6)
+                    connect_to.append(addresses[0])
+                
+                # In case we want to use dual stack
+                elif self.family == AddressType.DUAL:
+                    for a in addresses:
+                        if a[0] == socket.AF_INET:
+                            connect_to.append(a)
+                            break
+                    for a in addresses:
+                        if a[0] == socket.AF_INET6:
+                            connect_to.append(a)
+                            break
+                    
                 
                 print('-------------------------------------------------------')
-                for address in address_info:
+                for address in connect_to:
                     for i,v in enumerate('family, type, proto, canonname, sockaddr'.split(', ')):
                         print(v, '=', address[i])
                     print('-------------------------------------------------------')
-                # Get the family to use
+
+                
+                return
+            
+                '''
+                Hier weitermachen! Wenn nur ein socket, dann alles ganz normal. Aber falls DUALstack, müssen wir noch testen
+                '''
                 
                 # Try to create a socket from the address infos
-                for info in address_info:
+                for c in connect_to:
                     try:
-                        family, type, protocol, canonical_name, socket_address = info
+                        family, type, protocol, canonical_name, socket_address = c
                         sock = socket.socket(
                             family,
                             type,
@@ -102,7 +140,7 @@ class TCPSocketServer(IPCSocketServer):
                         if sock is not None: sock.close()
                             
             except socket.gaierror as e:
-                raise freedmIPCSocketCreation(f'Cannot create TCP server socket for address "{self.address}:{self.port}" (Address not supported by family {"IPv6" if family == AddressFamily.IPV6 else "IPv4"})')
+                raise freedmIPCSocketCreation(f'Cannot create TCP server socket for address "{self.address}:{self.port}" (Address not supported by family "{socket.AddressFamily(family).name}")')
             except Exception as e:
                 raise freedmIPCSocketCreation(f'Cannot create TCP server socket for address "{self.address}:{self.port}" ({e})')
         

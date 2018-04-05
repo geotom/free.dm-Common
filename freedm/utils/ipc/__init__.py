@@ -10,4 +10,4 @@ from freedm.utils.ipc.server.tcp import TCPSocketServer
 from freedm.utils.ipc.client.tcp import TCPSocketClient
 from freedm.utils.ipc.protocol import Protocol
 from freedm.utils.ipc.message import Message
-from freedm.utils.ipc.connection import Connection, ConnectionType, ConnectionPool, AddressFamily
+from freedm.utils.ipc.connection import Connection, ConnectionType, ConnectionPool, AddressType

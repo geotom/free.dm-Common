@@ -2,10 +2,12 @@
 This module defines an IPC server communicating via UXD sockets
 @author: Thomas Wanderer
 '''
+from posix import chmod
 
 try:
     # Imports
     import os
+    import stat
     import asyncio
     import socket
     import struct
@@ -26,11 +28,14 @@ except ImportError as e:
 class UXDSocketServer(IPCSocketServer):
     '''
     An IPC server using Unix Domain sockets implemented as async contextmanager.
+    This server can restrict clients access by their group and user memberships.
     '''
     
     def __init__(
             self,
             path: Union[str, Path]=None,
+            group_only: bool=False,
+            user_only: bool=False,
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             limit: Optional[int]=None,
             chunksize: Optional[int]=None,
@@ -41,16 +46,16 @@ class UXDSocketServer(IPCSocketServer):
         
         super().__init__(loop, limit, chunksize, max_connections, mode, protocol)
         self.path = path
+        self.group_only = group_only
+        self.user_only = user_only
 
     async def _init_server(self) -> Any:
         if not self.path:
             raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
         elif os.path.exists(self.path):
+            # Remove any previous file/directory
             if os.path.isdir(self.path):
-                try:
-                    os.rmdir()
-                except:
-                    raise freedmIPCSocketCreation(f'Cannot create UXD socket because "{self.path}" is a directory ({e})')
+                raise freedmIPCSocketCreation(f'Cannot create UXD socket because "{self.path}" is a directory ({e})')
             else:
                 try:
                     os.remove(self.path)
@@ -60,6 +65,12 @@ class UXDSocketServer(IPCSocketServer):
             # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.bind(self.path)
+            
+            # Secure socket
+            if self.user_only:
+                os.chmod(self.path, stat.S_IREAD | stat.S_IWRITE)
+            elif self.group_only and not self.user_only:
+                os.chmod(self.path, stat.S_IREAD | stat.S_IWRITE | stat.S_IRGRP | stat.S_IWGRP)
         except Exception as e:
             raise freedmIPCSocketCreation(f'Cannot create UXD socket file "{self.path}" ({e})')
         

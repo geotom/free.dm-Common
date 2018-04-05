@@ -18,10 +18,11 @@ from freedm.utils.exceptions import freedmBaseException
 C = TypeVar('C', bound='Connection')
 
 
-class AddressFamily(Enum):
+class AddressType(Enum):
     DUAL = 1
     IPV4 = 2
     IPV6 = 3
+    AUTO = 4
 
 
 class ConnectionPool(set):

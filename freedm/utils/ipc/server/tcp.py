@@ -151,7 +151,7 @@ class TCPSocketServer(IPCSocketServer):
                             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                             sock.bind(a_address)
                             sockets.append(sock)
-                            self.logger.error(f'IPC server bound to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
+                            self.logger.debug(f'IPC server bound to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
                         except socket.error as e:
                             self.logger.error(f'IPC server cannot bind to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
                             if sock is not None: sock.close()

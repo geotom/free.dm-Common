@@ -10,11 +10,12 @@ try:
     import socket
     import contextlib
     import time
+    import ssl
     from typing import Union, Type, Optional, Any
     
     # free.dm Imports
     from freedm.utils.ipc.server.base import IPCSocketServer
-    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation, freedmIPCSocketShutdown
+    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation
     from freedm.utils.ipc.connection import Connection, ConnectionType, AddressType
     from freedm.utils.ipc.protocol import Protocol
 except ImportError as e:
@@ -39,6 +40,7 @@ class TCPSocketServer(IPCSocketServer):
             self,
             address: Union[str, list]=None,
             port: int=None,
+            sslctx: ssl.SSLContext=None,
             family: Optional[AddressType]=AddressType.AUTO,
             socket: socket.socket=None,
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
@@ -54,6 +56,7 @@ class TCPSocketServer(IPCSocketServer):
         self.port = port
         self.family = family
         self.socket = socket
+        self.sslctx = sslctx
         
     def supports_dualstack(self, sock: socket.socket=None) -> bool:
         '''
@@ -93,7 +96,6 @@ class TCPSocketServer(IPCSocketServer):
             for a in self.address:
                 # Get the correct address information for the corresponding family
                 try:
-                    
                     addresses = socket.getaddrinfo(a, self.port, family=address_type, type=socket.SOCK_STREAM, proto=0, flags=socket.AI_PASSIVE+socket.AI_CANONNAME)
                 except socket.gaierror as e:
                     self.logger.error(f'Cannot resolve IPC server address "{a}:{self.port}" (Address not supported by family "{socket.AddressFamily(address_type).name}")')
@@ -103,6 +105,7 @@ class TCPSocketServer(IPCSocketServer):
                 try:
                     # Collect addresses we need to bind to based on the specified+supported address families
                     connect_to = []
+                    address_duo = []
                     
                     # In case we explicitly want an IPv4 or IPv6 socket
                     if address_type in (socket.AF_INET, socket.AF_INET6) and len(addresses) > 0:
@@ -116,30 +119,19 @@ class TCPSocketServer(IPCSocketServer):
                     # In case we want to use dual stack
                     elif self.family == AddressType.DUAL:
                         for a in addresses:
-                            if a[0] == socket.AF_INET:
-                                connect_to.append(a)
-                                break
-                        for a in addresses:
                             if a[0] == socket.AF_INET6:
-                                connect_to.append(a)
+                                address_duo.append(a)
                                 break
+                        # Only add an IPv4 address if dualstack is not supported or no IPv6 address is available
+                        if len(address_duo) == 0 or not self.supports_dualstack():
+                            for a in addresses:
+                                if a[0] == socket.AF_INET:
+                                    address_duo.append(a)
+                                    break
+                        # Add address duo to other addresses
+                        connect_to += address_duo
                         
-                    
-#                     print('-------------------------------------------------------')
-#                     for address in connect_to:
-#                         for i,v in enumerate('family, type, proto, canonname, sockaddr'.split(', ')):
-#                             print(v, '=', address[i])
-#                         print('-------------------------------------------------------')
-    
-                    '''
-                    Hier weitermachen! Wenn nur ein socket, dann alles ganz normal.
-                    Aber falls DUALstack, müssen wir noch testen
-                    
-                    TODO: REmove to support more than one in DUAL mode
-                    '''
-                    connect_to = [connect_to[0]]
-                    
-                    # Try to create a socket from the address infos
+                    # Try to create a socket from the address info
                     for c in connect_to:
                         try:
                             a_family, a_type, a_protocol, a_canonical_name, a_address = c
@@ -149,6 +141,8 @@ class TCPSocketServer(IPCSocketServer):
                                 a_protocol
                                 )
                             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                            if self.family == AddressType.DUAL and len(address_duo) <= 1:
+                                sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
                             sock.bind(a_address)
                             sockets.append(sock)
                             self.logger.debug(f'IPC server bound to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
@@ -156,7 +150,7 @@ class TCPSocketServer(IPCSocketServer):
                             self.logger.error(f'IPC server cannot bind to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
                             if sock is not None: sock.close()
                 except Exception as e:
-                    self.logger.error(f'Cannot create TCP server socket for address "{a}:{self.port}" ({e})')
+                    self.logger.error(f'IPC server cannot create TCP sockets for address "{a}:{self.port}" ({e})')
                     continue
                 
         # Create TCP socket server
@@ -166,7 +160,7 @@ class TCPSocketServer(IPCSocketServer):
                     server_options=dict(
                         reuse_address=True,
                         loop=self.loop,
-                        ssl=None,
+                        ssl=self.sslctx,
                         backlog=100,
                         sock=sock
                         )
@@ -178,7 +172,7 @@ class TCPSocketServer(IPCSocketServer):
                             )
                         servers.append(server)
             else:
-                raise Exception('Could not create TCP sockets')
+                raise Exception('Could not setup TCP sockets')
         except Exception as e:
             raise freedmIPCSocketCreation(f"Cannot create TCP server {'with socket(s)' if self.socket else 'at address(es)'} \"{','.join(sock) if self.socket else ','.join(map(lambda x: f'{x}:{self.port}', self.address)) }\" ({e})")
         

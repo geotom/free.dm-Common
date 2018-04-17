@@ -13,7 +13,7 @@ from typing import Union, Callable, Type, Optional
 from . import logging
 
 
-class ExceptionHandler(object):
+class ExceptionHandler:
     '''
     A custom Exception handler defining a method to react on errors
     '''

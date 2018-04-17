@@ -11,7 +11,7 @@ type checking methods.
 # Imports
 from typing import Any
 
-class TypeChecker(object):
+class TypeChecker:
     
     @staticmethod
     def isInteger(obj: Any) -> bool:

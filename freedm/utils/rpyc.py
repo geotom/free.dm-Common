@@ -24,7 +24,7 @@ def registerPeriodically(function, interval):
         yield from asyncio.sleep(interval)
         function()
 
-class AsyncIOServer(object):
+class AsyncIOServer:
     '''
     This RPyC server utilizes the AsyncIO loop instead of Threads.
     It is based on: https://github.com/tomerfiliba/rpyc/issues/175 and

@@ -31,9 +31,13 @@ class TCPSocketServer(IPCSocketServer):
     - IPV6: IPv6 only
     - DUAL: Binding to an IPv4 and IPv6 address
     - AUTO: Automatically using the address-families available with a preference for IPv6
+    
     Alternatively it is possible to provide a pre-created socket or list of sockets. In this case, 
     the address-family is ignored. The server can bind to more than one address. Provide a 
-    comma-separated list of interface addresses to bind to.  
+    comma-separated list of interface addresses to bind to.
+    
+    To secure the communication between the server and its clients, pass a pre-setup SSL
+    context object as parameter.
     '''
     
     def __init__(
@@ -86,7 +90,7 @@ class TCPSocketServer(IPCSocketServer):
         
         # The address family type set or preferred
         address_type = socket.AF_UNSPEC if self.family == AddressType.AUTO or self.family == AddressType.DUAL \
-            else socket.AF_INET6 if self.family != AddressType.IPV4 and socket.has_ipv6 else socket.AF_INET
+            else (socket.AF_INET6 if self.family != AddressType.IPV4 and socket.has_ipv6 else socket.AF_INET)
         
         # The socket object to bind to
         sockets = self.socket if isinstance(self.socket, list) else ([self.socket] if self.socket else [])
@@ -111,7 +115,7 @@ class TCPSocketServer(IPCSocketServer):
                     if address_type in (socket.AF_INET, socket.AF_INET6) and len(addresses) > 0:
                         connect_to.append(addresses[0])
                     
-                    # In case we want to auto-detect, we prefer IPv6 over IPv4 if supported and IPv6-address available
+                    # In case we want to auto-detect, we prefer IPv6 over IPv4 if supported and IPv6-address is available
                     elif self.family == AddressType.AUTO:
                         addresses.sort(key=lambda x: x[0] == socket.AF_INET6, reverse=socket.has_ipv6)
                         connect_to.append(addresses[0])
@@ -141,8 +145,9 @@ class TCPSocketServer(IPCSocketServer):
                                 a_protocol
                                 )
                             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                            if self.family == AddressType.DUAL and len(address_duo) <= 1:
+                            if self.family == AddressType.DUAL and len(address_duo) == 1 and address_duo[0][0] == socket.AF_INET6:
                                 sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+                                self.logger.debug(f'IPC server trying to enable IPv4/6 Dual Stack for address "{a_canonical_name or a_address}:{self.port}"')
                             sock.bind(a_address)
                             sockets.append(sock)
                             self.logger.debug(f'IPC server bound to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
@@ -189,13 +194,14 @@ class TCPSocketServer(IPCSocketServer):
             del self.SHUTDOWN
                            
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
+        sock = writer.get_extra_info('socket')
         return Connection(
-            socket=writer.get_extra_info('socket'),
+            socket=sock,
             pid=os.getpid(),
             uid=os.getuid(),
             gid=os.getgid(),
-            client_address=None,
-            server_address=None,
+            client_address=sock.getpeername(),
+            server_address=sock.getsockname(),
             reader=reader,
             writer=writer,
             read_handlers=set(),
@@ -207,21 +213,3 @@ class TCPSocketServer(IPCSocketServer):
                 'closed': None
                 }
             )
-        
-    # Gute Zusammenfassung
-    #https://erlerobotics.gitbooks.io/erle-robotics-python-gitbook-free/network_data_and_network_errors/network_exceptions.html
- 
-    # Dualstack
-    # !!! http://code.activestate.com/recipes/578504-server-supporting-ipv4-and-ipv6/
-    # !!! https://stackoverflow.com/questions/16762939/use-of-in6addr-setv4mapped-and-dual-stack-sockets
-    
-    # https://www.pythonsheets.com/notes/python-socket.html
-    # http://asyncio.readthedocs.io/en/latest/tcp_echo.html
-    
-#     addr = writer.get_extra_info('peername')
-#     print("Received %r from %r" % (message, addr))
-
-    # Mit IP6 oder nicht?
-    # https://www.pythonsheets.com/notes/python-socket.html#simple-tcp-echo-server-through-ipv6
-    # https://www.pythonsheets.com/notes/python-socket.html#disable-ipv6-only
-    # 

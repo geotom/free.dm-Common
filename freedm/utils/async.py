@@ -66,7 +66,7 @@ def getLoop(policy: Optional[Type[asyncio.AbstractEventLoopPolicy]]=None) -> asy
         return loop
 
 
-class BlockingContextManager(object):
+class BlockingContextManager:
     '''
     An async context manager which is safe from being
     interrupted by certain signals like SIGINT (Keyboard

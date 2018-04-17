@@ -18,7 +18,7 @@ except ImportError as e:
     raise freedmModuleImport(e)
 
 
-class FilesystemObserver(object):
+class FilesystemObserver:
     '''
     This class implements a filesystem monitor, observing changes to files within
     the provided directory path. The underlying monitoring capability is achieved by 

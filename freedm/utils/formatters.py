@@ -8,7 +8,7 @@ import json
 import textwrap
 from typing import Dict, List, Any
 
-class TableFormatter(object):
+class TableFormatter:
     '''
     A formatter printing data objects as formatted simple text table
     :param dict columns: A dictionary or py:class:::collections.OrderedDict of column keys (corresponding to the rowdata) and their responding header text

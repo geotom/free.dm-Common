@@ -5,7 +5,7 @@ Subclass from this class to create a custom IPC protocol for servers and clients
 '''
 
 
-class Protocol(object):
+class Protocol:
     
     version: None
     
@@ -20,8 +20,15 @@ class Protocol(object):
 # Protocols sollen rpc oder topic based sein, also entweder eine rpc API anbieten oder einfach nur ein Public subscribe anbieten
 # 
 # Brauchen evtl. Einen internen state?
+#
+# Sollten Zugriff auf verschiedene States haben wie:
+#
+# - Aktuelle Client Sessions
+# -
 # 
 # Sollten Versioniert werden können
+#
+# Sollten zwischen Client und Server unterscheiden können
 # 
 # Standard dekoratoren für Services oder amdereechanismen sollten erlauben schnell ein Protokoll aufzusetzen.
 # 

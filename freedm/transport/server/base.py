@@ -1,6 +1,6 @@
 '''
-This module defines the base IPC server. 
-Subclass from this class to create a custom IPC server implementation.
+This module defines the base transport server. 
+Subclass from this class to create a custom transport server implementation.
 @author: Thomas Wanderer
 '''
 
@@ -17,23 +17,23 @@ try:
     from freedm.utils import logging
     from freedm.utils.async import getLoop
     from freedm.utils.types import TypeChecker as checker
-    from freedm.utils.ipc.message import Message
-    from freedm.utils.ipc.protocol import Protocol
-    from freedm.utils.ipc.connection import Connection, ConnectionType, ConnectionPool
-    from freedm.utils.ipc.exceptions import freedmIPCMessageLimitOverrun
+    from freedm.transport.message import Message
+    from freedm.transport.protocol import Protocol
+    from freedm.transport.connection import Connection, ConnectionType, ConnectionPool
+    from freedm.transport.exceptions import freedmMessageLimitOverrun
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-IS = TypeVar('IS', bound='IPCSocketServer')
+TS = TypeVar('TS', bound='TransportServer')
 
 
-class IPCSocketServer(BlockingContextManager):
+class TransportServer(BlockingContextManager):
     '''
-    A generic server implementation for IPC servers allowing to communicate with connected clients
+    A generic transport server implementation for allowing to communicate with connected clients
     while keeping a list of active connections. It can be used as a contextmanager or as asyncio awaitable.
-    This IPC server provides basic functionality for receiving and sending messages and supports:
+    This server provides basic functionality for receiving and sending messages and supports:
     - Ephemeral and persistent (long-living) connections
     - Setting a maximum connection limit
     - Limiting amount of data sent or received
@@ -49,6 +49,9 @@ class IPCSocketServer(BlockingContextManager):
     
     # A state flag
     _shutdown = False
+    
+    # An identifier name for this server (Used for logging purposes). By default set to the class-name
+    name = None
     
     def __init__(
             self,
@@ -67,12 +70,14 @@ class IPCSocketServer(BlockingContextManager):
         self.mode       = mode
         self.protocol   = protocol
         
+        if not self.name:
+            self.name = self.__class__.__name__
         if not self._connection_pool:
             self._connection_pool = ConnectionPool()
         if checker.isInteger(max_connections):
             self._connection_pool.max = max_connections
         
-    async def __aenter__(self) -> IS:
+    async def __aenter__(self) -> TS:
         '''
         A template function that should be implemented by any subclass
         '''
@@ -83,7 +88,7 @@ class IPCSocketServer(BlockingContextManager):
         self._server = await self._init_server()
 
         # Check & Return self
-        if not self._server: self.logger.error('IPC server could not be started')
+        if not self._server: self.logger.error(f'{self.name} could not be started')
         return self
         
     async def __aexit__(self, *args) -> None:
@@ -119,7 +124,7 @@ class IPCSocketServer(BlockingContextManager):
                 loop=self.loop
                 )
         except Exception as e:
-            self.logger.error(f'Problem shutting down IPC server gracefully ({e})')
+            self.logger.error(f'Problem shutting down {self.name} gracefully ({e})')
         
         # Close the server
         try:
@@ -128,14 +133,14 @@ class IPCSocketServer(BlockingContextManager):
             for server in self._server:
                 server.close()
         except Exception as e:
-            self.logger.error(f'Cannot shutdown IPC server ({e})')
+            self.logger.error(f'Cannot shutdown {self.name} ({e})')
         try:   
             await self._server.wait_closed()
         except AttributeError:
             for server in self._server:
                 await server.wait_closed()
         except Exception as e:
-            self.logger.error(f'Could not wait until IPC server shutdown ({e})')    
+            self.logger.error(f'Could not wait until {self.name} shutdown ({e})')    
         
         # Call post-shutdown procedure
         await self._post_shutdown()
@@ -143,7 +148,7 @@ class IPCSocketServer(BlockingContextManager):
         # Call parent (Required to profit from SaveContextManager)
         await super().__aexit__()
     
-    async def __await__(self) -> IS:
+    async def __await__(self) -> TS:
         '''
         Makes this class awaitable
         '''
@@ -207,14 +212,14 @@ class IPCSocketServer(BlockingContextManager):
             if reason:
                 await self.sendMessage(reason, connection)
             if connection.reader.at_eof():
-                self.logger.debug('IPC connection closed by client')
+                self.logger.debug('Transport closed by client')
                 connection.reader.feed_eof()
             else:
-                self.logger.debug('IPC connection closed by server')
+                self.logger.debug('Transport closed by server')
                 if connection.writer.can_write_eof(): connection.writer.write_eof()
             await asyncio.sleep(.1)
             connection.writer.close()
-            self.logger.debug('IPC connection writer closed')
+            self.logger.debug('Transport writer closed')
             
     async def _init_server(self) -> Any:
         '''
@@ -246,7 +251,7 @@ class IPCSocketServer(BlockingContextManager):
             # Authenticate
             auth = await self.authenticateConnection(connection)
             if auth:
-                self.logger.debug('IPC connection was successfully authenticated')
+                self.logger.debug('Client connection was successfully authenticated')
             else:
                 await self.rejectConnection(connection, 'Could not authenticate')
                 return
@@ -267,10 +272,10 @@ class IPCSocketServer(BlockingContextManager):
                             consumed = chunks * self.chunksize
                             rest = self.limit - consumed
                             if self.limit == chunksize and chunks > 0:
-                                self.logger.error(f'IPC connection limit is smaller than chunksize. Closing connection.')
+                                self.logger.error(f'Client connection limit is smaller than chunksize. Closing connection.')
                                 break
                             if rest <= 0:
-                                self.logger.debug(f'IPC connection limit "{self.limit}" reached. Closing connection.')
+                                self.logger.debug(f'Client connection limit "{self.limit}" reached. Closing connection.')
                                 break
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
@@ -292,14 +297,14 @@ class IPCSocketServer(BlockingContextManager):
                 except asyncio.CancelledError:
                     return # We return as the connection closing is handled by self.close()
                 except Exception as e:
-                    self.logger.error(f'IPC connection error ({e})')
+                    self.logger.error(f'Transport error ({e})')
         except asyncio.CancelledError:
             return # We return as the connection closing is handled by self.close()
         except ConnectionError as e:
-            self.logger.error(f'IPC connection failed ({e})')
+            self.logger.error(f'Transport failed ({e})')
             return
         except Exception as e:
-            self.logger.error(f'IPC connection error ({e})')
+            self.logger.error(f'Transport error ({e})')
         
         # Close the connection (It will be automatically removed from the pool)
         await self.closeConnection(connection)
@@ -322,7 +327,7 @@ class IPCSocketServer(BlockingContextManager):
         try:
             self.protocol.handleMessage(message)
         except:
-            self.logger.debug(f'IPC server received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
+            self.logger.debug(f'{self.name} received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
             
     async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
         '''
@@ -343,7 +348,7 @@ class IPCSocketServer(BlockingContextManager):
             if len(message) == 0:
                 return False
             if self.limit and len(message) > self.limit:
-                raise freedmIPCMessageLimitOverrun()
+                raise freedmMessageLimitOverrun()
             
             
             # Dispatch message to affected connections as long as we're not shutting down

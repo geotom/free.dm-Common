@@ -1,5 +1,5 @@
 '''
-This module defines an IPC server connection object
+This module defines transport related object like connections and pools
 @author: Thomas Wanderer
 '''
 

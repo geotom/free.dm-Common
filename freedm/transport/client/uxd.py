@@ -1,5 +1,5 @@
 '''
-This module defines an IPC client communicating via UXD sockets
+This module defines a client communicating via UXD sockets
 @author: Thomas Wanderer
 '''
 
@@ -13,18 +13,18 @@ try:
     from typing import Optional, Type, Union
     
     # free.dm Imports
-    from freedm.utils.ipc.client.base import IPCSocketClient
-    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation, freedmIPCSocketShutdown
-    from freedm.utils.ipc.protocol import Protocol
-    from freedm.utils.ipc.connection import Connection, ConnectionType
+    from freedm.transport.client.base import TransportClient
+    from freedm.transport.exceptions import freedmSocketCreation, freedmSocketShutdown
+    from freedm.transport.protocol import Protocol
+    from freedm.transport.connection import Connection, ConnectionType
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-class UXDSocketClient(IPCSocketClient):
+class UXDSocketClient(TransportClient):
     '''
-    An IPC client connecting to IPC servers via an Unix Domain Socket.
+    A client connecting to transport servers via an Unix Domain Socket.
     '''
     
     # The UXD socket
@@ -46,7 +46,7 @@ class UXDSocketClient(IPCSocketClient):
         
     async def _init_connect(self):
         if not self.path:
-            raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
+            raise freedmSocketCreation('Cannot create UXD socket (No socket file provided)')
         try:
             # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
             self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -55,7 +55,7 @@ class UXDSocketClient(IPCSocketClient):
             reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop)
             return self._assembleConnection(reader, writer)
         except Exception as e:
-            raise freedmIPCSocketCreation(f'Cannot connect to UXD socket file "{self.path}" ({e})')
+            raise freedmSocketCreation(f'Cannot connect to UXD socket file "{self.path}" ({e})')
         
     async def _post_disconnect(self, connection) -> None:
         if self._socket:
@@ -64,8 +64,8 @@ class UXDSocketClient(IPCSocketClient):
             try:
                 sock.close()
             except Exception as e:
-                raise freedmIPCSocketShutdown(e)
-            self.logger.debug(f'IPC connection closed (UXD socket "{self.path}")')
+                raise freedmSocketShutdown(e)
+            self.logger.debug(f'Transport closed (UXD socket "{self.path}")')
             return
                            
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:

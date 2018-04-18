@@ -1,6 +1,6 @@
 '''
-This module defines a generic IPC protocol to be used between ICP servers and clients
-Subclass from this class to create a custom IPC protocol for servers and clients.
+This module defines a generic transport protocol to be used between servers and clients
+Subclass from this class to create your own communication protocol.
 @author: Thomas Wanderer
 '''
 

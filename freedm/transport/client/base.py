@@ -1,6 +1,6 @@
 '''
-This module defines the base IPC server. 
-Subclass from this class to create a custom IPC server implementation.
+This module defines the base transport client. Subclass from
+this class to create a custom transport client implementation.
 @author: Thomas Wanderer
 '''
 
@@ -15,23 +15,23 @@ try:
     from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
-    from freedm.utils.ipc.message import Message
-    from freedm.utils.ipc.protocol import Protocol
-    from freedm.utils.ipc.connection import Connection, ConnectionType
-    from freedm.utils.ipc.exceptions import freedmIPCMessageLimitOverrun
+    from freedm.transport.message import Message
+    from freedm.transport.protocol import Protocol
+    from freedm.transport.connection import Connection, ConnectionType
+    from freedm.transport.exceptions import freedmMessageLimitOverrun
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-IC = TypeVar('IC', bound='IPCSocketClient')
+TC = TypeVar('TC', bound='TransportClient')
 
 
-class IPCSocketClient(BlockingContextManager):
+class TransportClient(BlockingContextManager):
     '''
-    A generic client implementation to connect to IPC servers. It can be used 
+    A generic client implementation to connect to transport servers. It can be used 
     as a contextmanager or as asyncio awaitable. It supports basic message 
-    exchange and can be configured with a protocol for advanced IPC communication.
+    exchange and can be configured with a protocol for advanced communication.
     A client can:
     - Establish ephemeral and persistent (long-living) connections
     - Limiting amount of data sent or received
@@ -43,6 +43,9 @@ class IPCSocketClient(BlockingContextManager):
     
     # Handler coroutine
     _handler: asyncio.coroutine=None
+    
+    # An identifier name for this client (Used for logging purposes). By default set to the class-name
+    name = None
     
     def __init__(
             self,
@@ -62,7 +65,10 @@ class IPCSocketClient(BlockingContextManager):
         self.mode       = mode
         self.protocol   = protocol
         
-    async def __aenter__(self) -> IC:
+        if not self.name:
+            self.name = self.__class__.__name__
+        
+    async def __aenter__(self) -> TC:
         '''
         A template function that should be implemented by any subclass
         '''
@@ -79,7 +85,7 @@ class IPCSocketClient(BlockingContextManager):
         if connection: await self._post_connect(connection)
 
         # Check & Return self
-        if not connection: self.logger('IPC connection could not be established')
+        if not connection: self.logger('Transport could not be established')
         return self
         
     async def __aexit__(self, *args) -> None:
@@ -114,7 +120,7 @@ class IPCSocketClient(BlockingContextManager):
         # Call parent (Required to profit from SaveContextManager)
         await super().__aexit__(*args)
 
-    async def __await__(self) -> IC:
+    async def __await__(self) -> TC:
         '''
         Makes this class awaitable
         '''
@@ -162,10 +168,10 @@ class IPCSocketClient(BlockingContextManager):
                 await self.sendMessage(reason, connection)
             try:
                 if connection.reader.at_eof():
-                    self.logger.debug('IPC connection closed by server')
+                    self.logger.debug('Transport closed by server')
                     connection.reader.feed_eof()
                 else:
-                    self.logger.debug('IPC connection closed by client')
+                    self.logger.debug('Transport closed by client')
                     if connection.writer.can_write_eof(): connection.writer.write_eof()
                 await asyncio.sleep(.1)
                 connection.writer.close()
@@ -173,7 +179,7 @@ class IPCSocketClient(BlockingContextManager):
                 pass
             finally:
                 connection.state['closed'] = time.time()
-                self.logger.debug('IPC connection writer closed')
+                self.logger.debug('Transport writer closed')
                 
     def _onConnectionEstablished(self, connection: Connection) -> None:
         '''
@@ -198,7 +204,7 @@ class IPCSocketClient(BlockingContextManager):
                         )
                 )
         except Exception as e:
-            self.logger.debug('IPC connection handler could not be initialized')
+            self.logger.debug('Transport connection handler could not be initialized')
     
     async def _init_connect(self) -> Optional[Connection]:
         '''
@@ -271,13 +277,13 @@ class IPCSocketClient(BlockingContextManager):
                 except asyncio.CancelledError:
                     pass
                 except Exception as e:
-                    self.logger.error(f'IPC connection error ({e})')
+                    self.logger.error(f'Transport error ({e})')
         except asyncio.CancelledError:
             pass
         except ConnectionError as e:
-            self.logger.error(f'IPC connection failed ({e})')
+            self.logger.error(f'Transport failed ({e})')
         except Exception as e:
-            self.logger.error(f'IPC connection error ({e})')
+            self.logger.error(f'Transport error ({e})')
         
         # Close this connection again
         await self.close()
@@ -290,7 +296,7 @@ class IPCSocketClient(BlockingContextManager):
         try:
             self.protocol.handleMessage(message)
         except:
-            self.logger.debug(f'IPC client received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
+            self.logger.debug(f'{self.name} client received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
 
     async def sendMessage(self, message: Union[str, int, float], blocking: bool=False) -> bool:
         '''
@@ -307,7 +313,7 @@ class IPCSocketClient(BlockingContextManager):
             if len(message) == 0:
                 return False
             if self.limit and len(message) > self.limit:
-                raise freedmIPCMessageLimitOverrun()
+                raise freedmMessageLimitOverrun()
             
             # Dispatch message as long as not we're being disconnected (this task getting cancelled)
             if (self._connection and not self._handler.done()) and not self._connection.state['closed']:

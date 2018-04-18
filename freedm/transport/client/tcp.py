@@ -1,5 +1,5 @@
 '''
-This module defines an IPC client communicating via TCP sockets
+This module defines a transport client communicating via TCP sockets
 @author: Thomas Wanderer
 '''
 
@@ -13,19 +13,19 @@ try:
     from typing import Optional, Type, Union 
     
     # free.dm Imports
-    from freedm.utils.ipc.client.base import IPCSocketClient
-    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation, freedmIPCSocketShutdown
-    from freedm.utils.ipc.protocol import Protocol
-    from freedm.utils.ipc.connection import Connection, ConnectionType, AddressType
+    from freedm.transport.client.base import TransportClient
+    from freedm.transport.exceptions import freedmSocketCreation, freedmSocketShutdown
+    from freedm.transport.protocol import Protocol
+    from freedm.transport.connection import Connection, ConnectionType, AddressType
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-class TCPSocketClient(IPCSocketClient):
+class TCPSocketClient(TransportClient):
     '''
-    An IPC client connecting to IPC servers via an TCP socket.
-    This client supports both IPv4 and IPv6 connections in the following modes:
+    A client connecting to transport servers via TCP socket.
+    This client supports both IPv4 and IPv6 addresses in the following modes:
     - IPV4: IPv4 only
     - IPV6: IPv6 only
     - AUTO: Automatically using the address-families available with a preference for IPv6
@@ -69,7 +69,7 @@ class TCPSocketClient(IPCSocketClient):
         try:
             addresses = socket.getaddrinfo(self.address, self.port, family=address_type, type=socket.SOCK_STREAM, proto=0, flags=socket.AI_PASSIVE+socket.AI_CANONNAME)
         except socket.gaierror as e:
-            raise freedmIPCSocketCreation(f'Cannot resolve IPC server address "{self.address}:{self.port}" (Address not supported by family "{socket.AddressFamily(address_type).name}")')
+            raise freedmSocketCreation(f'Cannot resolve {self.name} address "{self.address}:{self.port}" (Address not supported by family "{socket.AddressFamily(address_type).name}")')
         
         # In case we explicitly want an IPv4 or IPv6 socket
         if address_type in (socket.AF_INET, socket.AF_INET6) and len(addresses) > 0:
@@ -93,7 +93,7 @@ class TCPSocketClient(IPCSocketClient):
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             except socket.error as e:
                 if self._socket is not None: self._socket.close()
-                raise freedmIPCSocketCreation(f'Cannot create TCP socket for {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}" ({e})')
+                raise freedmSocketCreation(f'Cannot create TCP socket for {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}" ({e})')
         
         # Connect the socket
         try:
@@ -102,14 +102,14 @@ class TCPSocketClient(IPCSocketClient):
                 loop=self.loop,
                 ssl=self.sslctx,
                 sock=self._socket,
-                server_hostname=self.address
+                server_hostname=self.address if self.sslctx else None
                 )
             reader, writer = await asyncio.open_connection(**client_options)
             return self._assembleConnection(reader, writer)
         except ssl.CertificateError as e:
-            raise freedmIPCSocketCreation(f'Cannot connect to TCP server with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}" (SSL Error: {e})')
+            raise freedmSocketCreation(f'Cannot connect to TCP server with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}" (SSL Error: {e})')
         except Exception as e:
-            raise freedmIPCSocketCreation(f'Cannot connect to TCP server with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}" ({e})')
+            raise freedmSocketCreation(f'Cannot connect to TCP server with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}" ({e})')
         
     async def _post_disconnect(self, connection) -> None:
         if self._socket:
@@ -118,8 +118,8 @@ class TCPSocketClient(IPCSocketClient):
             try:
                 sock.close()
             except Exception as e:
-                raise freedmIPCSocketShutdown(e)
-            self.logger.debug(f'IPC connection closed (TCP socket with {"IPv4" if sock.family == socket.AF_INET else "IPv6"}-address "{self.address}:{self.port}")')
+                raise freedmSocketShutdown(e)
+            self.logger.debug(f'Transport closed (TCP socket with {"IPv4" if sock.family == socket.AF_INET else "IPv6"}-address "{self.address}:{self.port}")')
             return
                            
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:

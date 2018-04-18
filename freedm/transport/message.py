@@ -1,6 +1,5 @@
 '''
-This module defines an IPC server message object and
-IPC API commands
+This module defines a message object received by transport sockets
 @author: Thomas Wanderer
 '''
 

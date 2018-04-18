@@ -1,5 +1,5 @@
 '''
-This module defines an IPC server communicating via TCP
+This module defines a transport server communicating via TCP
 @author: Thomas Wanderer
 '''
 
@@ -14,19 +14,19 @@ try:
     from typing import Union, Type, Optional, Any
     
     # free.dm Imports
-    from freedm.utils.ipc.server.base import IPCSocketServer
-    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation
-    from freedm.utils.ipc.connection import Connection, ConnectionType, AddressType
-    from freedm.utils.ipc.protocol import Protocol
+    from freedm.transport.server.base import TransportServer
+    from freedm.transport.exceptions import freedmSocketCreation
+    from freedm.transport.connection import Connection, ConnectionType, AddressType
+    from freedm.transport.protocol import Protocol
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-class TCPSocketServer(IPCSocketServer):
+class TCPSocketServer(TransportServer):
     '''
-    An IPC server binding using TCP implemented as async contextmanager.
-    This server supports both IPv4 and IPv6 in the following modes:
+    A server using TCP sockets and implemented as async contextmanager.
+    This server supports both IPv4 and IPv6 addresses in the following modes:
     - IPV4: IPv4 only
     - IPV6: IPv6 only
     - DUAL: Binding to an IPv4 and IPv6 address
@@ -102,7 +102,7 @@ class TCPSocketServer(IPCSocketServer):
                 try:
                     addresses = socket.getaddrinfo(a, self.port, family=address_type, type=socket.SOCK_STREAM, proto=0, flags=socket.AI_PASSIVE+socket.AI_CANONNAME)
                 except socket.gaierror as e:
-                    self.logger.error(f'Cannot resolve IPC server address "{a}:{self.port}" (Address not supported by family "{socket.AddressFamily(address_type).name}")')
+                    self.logger.error(f'Cannot resolve {self.name} address "{a}:{self.port}" (Address not supported by family "{socket.AddressFamily(address_type).name}")')
                     continue
                 
                 # Create a new sockets
@@ -147,15 +147,14 @@ class TCPSocketServer(IPCSocketServer):
                             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                             if self.family == AddressType.DUAL and len(address_duo) == 1 and address_duo[0][0] == socket.AF_INET6:
                                 sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-                                self.logger.debug(f'IPC server trying to enable IPv4/6 Dual Stack for address "{a_canonical_name or a_address}:{self.port}"')
+                                self.logger.debug(f'{self.name} trying to enable IPv4/6 Dual Stack for address "{a_canonical_name or a_address}:{self.port}"')
                             sock.bind(a_address)
                             sockets.append(sock)
-                            self.logger.debug(f'IPC server bound to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
                         except socket.error as e:
-                            self.logger.error(f'IPC server cannot bind to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
+                            self.logger.error(f'{self.name} cannot bind to TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
                             if sock is not None: sock.close()
                 except Exception as e:
-                    self.logger.error(f'IPC server cannot create TCP sockets for address "{a}:{self.port}" ({e})')
+                    self.logger.error(f'{self.name} cannot create TCP sockets for address "{a}:{self.port}" ({e})')
                     continue
                 
         # Create TCP socket server
@@ -171,15 +170,16 @@ class TCPSocketServer(IPCSocketServer):
                         )
                     if self.limit:
                         server_options.update({'limit': self.limit})
-                        server = await asyncio.start_server(
-                            self._onConnectionEstablished,
-                            **server_options
-                            )
-                        servers.append(server)
+                    server = await asyncio.start_server(
+                        self._onConnectionEstablished,
+                        **server_options
+                        )
+                    servers.append(server)
+                    self.logger.debug(f'{self.name} bound to{" ssl-secured " if self.sslctx else " "}TCP socket with {"IPv4" if a_family == socket.AF_INET else "IPv6"}-address "{a_canonical_name or a_address}:{self.port}"')
             else:
                 raise Exception('Could not setup TCP sockets')
         except Exception as e:
-            raise freedmIPCSocketCreation(f"Cannot create TCP server {'with socket(s)' if self.socket else 'at address(es)'} \"{','.join(sock) if self.socket else ','.join(map(lambda x: f'{x}:{self.port}', self.address)) }\" ({e})")
+            raise freedmSocketCreation(f"Cannot create {self.name} {'with socket(s)' if self.socket else 'at address(es)'} \"{','.join(sock) if self.socket else ','.join(map(lambda x: f'{x}:{self.port}', self.address)) }\" ({e})")
         
         # Return server
         return servers
@@ -190,7 +190,7 @@ class TCPSocketServer(IPCSocketServer):
     async def _post_shutdown(self) -> None:
         if self.SHUTDOWN:
             for sock in self.SHUTDOWN:
-                self.logger.debug(f'IPC server closed TCP socket with {"IPv4" if sock[0] == socket.AF_INET else "IPv6"}-address "{sock[1][0]}:{self.port}"')
+                self.logger.debug(f'{self.name} closed (TCP socket with {"IPv4" if sock[0] == socket.AF_INET else "IPv6"}-address "{sock[1][0]}:{self.port}")')
             del self.SHUTDOWN
                            
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:

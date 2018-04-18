@@ -3,34 +3,30 @@ The generic daemon class for all free.dm daemons
 @author: Thomas Wanderer
 '''
 
-# Imports
-import os
-import time
-import argparse
 try:
+    # Imports
+    import os
+    import time
+    import argparse
     import psutil
-except ImportError as e:
-    from freedm.utils.exceptions import freedmModuleImport
-    raise freedmModuleImport(e)
-from threading import Thread
-from typing import Dict, List
-
-# RPyC imports
-try:
+    from threading import Thread
+    from typing import Dict, List
+    
+    # RPyC imports
     from rpyc.utils.server import ThreadPoolServer, ThreadedServer
     from rpyc.utils.authenticators import AuthenticationError
+    
+    # free.dm Imports
+    from freedm.utils import logger as L
+    from freedm.utils import globals as G
+    from freedm.data import DataManager, IniFileStore
+    from freedm.utils.types import TypeChecker as checker
+    from freedm.utils.exceptions import ExceptionHandler
+    from freedm.daemons.client import DaemonClient
+    from freedm.daemons.service import DaemonService
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
-
-# free.dm Imports
-from freedm.utils import logger as L
-from freedm.utils import globals as G
-from freedm.data import DataManager, IniFileStore
-from freedm.utils.types import TypeChecker as checker
-from freedm.utils.exceptions import ExceptionHandler
-from freedm.daemons.client import DaemonClient
-from freedm.daemons.service import DaemonService
 
 
 class GenericDaemon(ThreadedServer):

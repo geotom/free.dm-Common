@@ -1,8 +1,7 @@
 '''
-This module defines an IPC server communicating via UXD sockets
+This module defines a server communicating via UXD sockets
 @author: Thomas Wanderer
 '''
-from posix import chmod
 
 try:
     # Imports
@@ -16,18 +15,18 @@ try:
     from typing import Union, Type, Optional, Any
     
     # free.dm Imports
-    from freedm.utils.ipc.server.base import IPCSocketServer
-    from freedm.utils.ipc.exceptions import freedmIPCSocketCreation, freedmIPCSocketShutdown
-    from freedm.utils.ipc.connection import Connection, ConnectionType
-    from freedm.utils.ipc.protocol import Protocol
+    from freedm.transport.server.base import TransportServer
+    from freedm.transport.exceptions import freedmSocketCreation, freedmSocketShutdown
+    from freedm.transport.connection import Connection, ConnectionType
+    from freedm.transport.protocol import Protocol
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
 
 
-class UXDSocketServer(IPCSocketServer):
+class UXDSocketServer(TransportServer):
     '''
-    An IPC server using Unix Domain sockets implemented as async contextmanager.
+    A server using Unix Domain sockets implemented as async contextmanager.
     This server can restrict clients access by their group and user memberships.
     '''
     
@@ -51,16 +50,16 @@ class UXDSocketServer(IPCSocketServer):
 
     async def _init_server(self) -> Any:
         if not self.path:
-            raise freedmIPCSocketCreation('Cannot create UXD socket (No socket file provided)')
+            raise freedmSocketCreation('Cannot create UXD socket (No socket file provided)')
         elif os.path.exists(self.path):
             # Remove any previous file/directory
             if os.path.isdir(self.path):
-                raise freedmIPCSocketCreation(f'Cannot create UXD socket because "{self.path}" is a directory ({e})')
+                raise freedmSocketCreation(f'Cannot create UXD socket because "{self.path}" is a directory ({e})')
             else:
                 try:
                     os.remove(self.path)
                 except Exception as e:
-                    raise freedmIPCSocketCreation(f'Cannot delete UXD socket file "{self.path}" ({e})')
+                    raise freedmSocketCreation(f'Cannot delete UXD socket file "{self.path}" ({e})')
         try:
             # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -72,7 +71,7 @@ class UXDSocketServer(IPCSocketServer):
             elif self.group_only and not self.user_only:
                 os.chmod(self.path, stat.S_IREAD | stat.S_IWRITE | stat.S_IRGRP | stat.S_IWGRP)
         except Exception as e:
-            raise freedmIPCSocketCreation(f'Cannot create UXD socket file "{self.path}" ({e})')
+            raise freedmSocketCreation(f'Cannot create UXD socket file "{self.path}" ({e})')
         
         # Create UDP socket server
         if self.limit:
@@ -88,8 +87,8 @@ class UXDSocketServer(IPCSocketServer):
         try:
             os.remove(self.path)
         except Exception as e:
-            raise freedmIPCSocketShutdown(e)
-        self.logger.debug(f'IPC server closed (UXD socket "{self.path}")')
+            raise freedmSocketShutdown(e)
+        self.logger.debug(f'{self.name} closed (UXD socket "{self.path}")')
         
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         sock = writer.get_extra_info('socket')

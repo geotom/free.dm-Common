@@ -10,7 +10,7 @@ try:
     import time
     import textwrap
     import functools
-    from typing import Union, Type, Optional, TypeVar, Iterable, Any
+    from typing import Union, Type, Optional, TypeVar, Iterable, Any, List
     
     # free.dm Imports
     from freedm.utils.async import BlockingContextManager
@@ -39,10 +39,12 @@ class TransportServer(BlockingContextManager):
     - Limiting amount of data sent or received
     - Reading data at once or in chunks
     - Client authentication
+    
+    
     '''
     
     # The context (This server)
-    _server: Type[asyncio.AbstractServer]=None
+    _server: Union[Type[asyncio.AbstractServer], List[Type[asyncio.AbstractServer]]]=None
     
     # A register for active client connections
     _connection_pool: ConnectionPool=None
@@ -126,7 +128,7 @@ class TransportServer(BlockingContextManager):
         except Exception as e:
             self.logger.error(f'Problem shutting down {self.name} gracefully ({e})')
         
-        # Close the server
+        # Close the server oder servers if more than one
         try:
             self._server.close()
         except AttributeError:

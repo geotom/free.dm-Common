@@ -181,7 +181,7 @@ class TCPSocketServer(TransportServer):
         except Exception as e:
             raise freedmSocketCreation(f"Cannot create {self.name} {'with socket(s)' if self.socket else 'at address(es)'} \"{','.join(sock) if self.socket else ','.join(map(lambda x: f'{x}:{self.port}', self.address)) }\" ({e})")
         
-        # Return server
+        # Return servers
         return servers
     
     async def _pre_shutdown(self) -> None:

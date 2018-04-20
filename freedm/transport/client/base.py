@@ -265,7 +265,7 @@ class TransportClient(BlockingContextManager):
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
                         chunks += 1
-                    elif not self.limit and self.lines:
+                    elif self.lines:
                         try:
                             raw = await connection.reader.readuntil(separator=b'\n')
                         except asyncio.IncompleteReadError as e:
@@ -274,7 +274,6 @@ class TransportClient(BlockingContextManager):
                             raise e
                         except Exception as e:
                             raw = ''
-                            
                     else:
                         raw = await connection.reader.read(self.limit or -1)
                     

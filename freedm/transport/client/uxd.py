@@ -36,12 +36,13 @@ class UXDSocketClient(TransportClient):
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             timeout: int=None,
             limit: Optional[int]=None,
+            lines: Optional[bool]=False,
             chunksize: Optional[int]=None,
             mode: Optional[ConnectionType]=None,
             protocol: Optional[Protocol]=None
             ) -> None:
         
-        super().__init__(loop, timeout, limit, chunksize, mode, protocol)
+        super().__init__(loop, timeout, limit, lines, chunksize, mode, protocol)
         self.path = path
         
     async def _init_connect(self):

@@ -50,12 +50,13 @@ class TCPSocketServer(TransportServer):
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             limit: Optional[int]=None,
             chunksize: Optional[int]=None,
+            lines: Optional[bool]=False,
             max_connections: Optional[int]=None,
             mode: Optional[ConnectionType]=None,
             protocol: Optional[Protocol]=None
             ) -> None:
         
-        super().__init__(loop, limit, chunksize, max_connections, mode, protocol)
+        super().__init__(loop, limit, lines, chunksize, max_connections, mode, protocol)
         self.address = address if isinstance(address, list) else [address]
         self.port = port
         self.family = family

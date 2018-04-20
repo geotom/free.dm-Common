@@ -54,6 +54,7 @@ class TransportClient(BlockingContextManager):
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             timeout: int=None,
             limit: Optional[int]=None,
+            lines: Optional[bool]=False,
             chunksize: Optional[int]=None,
             mode: Optional[ConnectionType]=None,
             protocol: Optional[Protocol] = None
@@ -65,10 +66,12 @@ class TransportClient(BlockingContextManager):
         self.limit      = limit
         self.chunksize  = chunksize
         self.mode       = mode
-        self.protocol   = protocol
+        self.lines      = lines
         
         if not self.name:
             self.name = self.__class__.__name__
+        if protocol:
+            self.setProtocol(protocol)
         
     async def __aenter__(self) -> TC:
         '''
@@ -262,6 +265,16 @@ class TransportClient(BlockingContextManager):
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
                         chunks += 1
+                    elif not self.limit and self.lines:
+                        try:
+                            raw = await connection.reader.readuntil(separator=b'\n')
+                        except asyncio.IncompleteReadError as e:
+                            break
+                        except asyncio.CancelledError as e:
+                            raise e
+                        except Exception as e:
+                            raw = ''
+                            
                     else:
                         raw = await connection.reader.read(self.limit or -1)
                     
@@ -311,7 +324,10 @@ class TransportClient(BlockingContextManager):
         '''
         try:
             # Encode and check message
-            message = str(message).encode()
+            message = str(message)
+            if self.lines and not message.endswith('\n'):
+                message += '\n'
+            message = message.encode()
             if len(message) == 0:
                 return False
             if self.limit and len(message) > self.limit:
@@ -362,3 +378,9 @@ class TransportClient(BlockingContextManager):
         Stop this client connection
         '''
         await self.__aexit__()
+        
+    def setProtocol(self, protocol: Protocol) -> None:
+        '''
+        Sets a new messaging protocol for this transport
+        '''
+        self.protocol = protocol

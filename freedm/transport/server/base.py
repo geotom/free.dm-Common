@@ -40,7 +40,18 @@ class TransportServer(BlockingContextManager):
     - Reading data at once or in chunks
     - Client authentication
     
+    Connection types:
+    By default a server keeps connections alive (persistent) until an EOF is detected. But alternatively 
+    it can be set to close the connection immediately after sending a message to the connected client (ephemeral).
     
+    Connection establishment:
+    Any newly created client connection will be checked against an optional maximum parallel connection limit 
+    and the client might be rejected if the limit has been surpassed. If a client connections gets accepted, 
+    the specific server implementation should further authenticate the client and reject it as well on failure.
+    
+    Reading & sending data:
+    First of all, all message IO is handled in a non-blocking asynchronous manner. The server knows several
+    strategies when reading and sending messages. The reading by default is ...
     '''
     
     # The context (This server)
@@ -59,6 +70,7 @@ class TransportServer(BlockingContextManager):
             self,
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             limit: Optional[int]=None,
+            lines: Optional[bool]=False,
             chunksize: Optional[int]=None,
             max_connections: Optional[int]=None,
             mode: Optional[ConnectionType]=None,
@@ -70,7 +82,7 @@ class TransportServer(BlockingContextManager):
         self.limit      = limit
         self.chunksize  = chunksize
         self.mode       = mode
-        self.protocol   = protocol
+        self.lines      = lines
         
         if not self.name:
             self.name = self.__class__.__name__
@@ -78,6 +90,8 @@ class TransportServer(BlockingContextManager):
             self._connection_pool = ConnectionPool()
         if checker.isInteger(max_connections):
             self._connection_pool.max = max_connections
+        if protocol:
+            self.setProtocol(protocol)
         
     async def __aenter__(self) -> TS:
         '''
@@ -213,6 +227,7 @@ class TransportServer(BlockingContextManager):
             # Tell client the reason
             if reason:
                 await self.sendMessage(reason, connection)
+                
             if connection.reader.at_eof():
                 self.logger.debug('Transport closed by client')
                 connection.reader.feed_eof()
@@ -282,9 +297,18 @@ class TransportServer(BlockingContextManager):
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
                         chunks += 1
+                    elif not self.limit and self.lines:
+                        try:
+                            raw = await connection.reader.readuntil(separator=b'\n')
+                        except asyncio.IncompleteReadError as e:
+                            break
+                        except asyncio.CancelledError as e:
+                            raise e
+                        except Exception as e:
+                            raw = ''
                     else:
                         raw = await connection.reader.read(self.limit or -1)
-                    
+                        
                     # Handle the received message or message fragment
                     if not len(raw) == 0:
                         message = Message(
@@ -346,12 +370,14 @@ class TransportServer(BlockingContextManager):
             connections = [c for c in affected if not c.state['closed']]
     
             # Encode and check message
-            message = str(message).encode()
+            message = str(message)
+            if self.lines and not message.endswith('\n'):
+                message += '\n'
+            message = message.encode()
             if len(message) == 0:
                 return False
             if self.limit and len(message) > self.limit:
                 raise freedmMessageLimitOverrun()
-            
             
             # Dispatch message to affected connections as long as we're not shutting down
             if len(connections) > 0 and not self._shutdown:
@@ -409,3 +435,9 @@ class TransportServer(BlockingContextManager):
         Stop this server
         '''
         await self.__aexit__()
+        
+    def setProtocol(self, protocol: Protocol) -> None:
+        '''
+        Sets a new messaging protocol for this transport
+        '''
+        self.protocol = protocol

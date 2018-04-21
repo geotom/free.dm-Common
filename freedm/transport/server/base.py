@@ -13,10 +13,10 @@ try:
     from typing import Union, Type, Optional, TypeVar, Iterable, Any, List
     
     # free.dm Imports
-    from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
     from freedm.utils.types import TypeChecker as checker
+    from freedm.transport.base import Transport
     from freedm.transport.message import Message
     from freedm.transport.protocol import Protocol
     from freedm.transport.connection import Connection, ConnectionType, ConnectionPool
@@ -29,7 +29,7 @@ except ImportError as e:
 TS = TypeVar('TS', bound='TransportServer')
 
 
-class TransportServer(BlockingContextManager):
+class TransportServer(Transport):
     '''
     A generic transport server implementation for allowing to communicate with connected clients
     while keeping a list of active connections. It can be used as a contextmanager or as asyncio awaitable.
@@ -61,10 +61,7 @@ class TransportServer(BlockingContextManager):
     _connection_pool: ConnectionPool=None
     
     # A state flag
-    _shutdown = False
-    
-    # An identifier name for this server (Used for logging purposes). By default set to the class-name
-    name = None
+    _shutdown: bool=False
     
     def __init__(
             self,
@@ -297,15 +294,18 @@ class TransportServer(BlockingContextManager):
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
                         chunks += 1
+                    # Read line by line (Respecting set limit)
                     elif self.lines:
                         try:
                             raw = await connection.reader.readuntil(separator=b'\n')
                         except asyncio.IncompleteReadError as e:
-                            break
+                            self.logger.error(f'Client message exceeds limit "{self.limit}".')
+                            raw = ''
                         except asyncio.CancelledError as e:
                             raise e
                         except Exception as e:
                             raw = ''
+                    # Default read (Respecting set limit)
                     else:
                         raw = await connection.reader.read(self.limit or -1)
                         
@@ -341,7 +341,7 @@ class TransportServer(BlockingContextManager):
         or passes the message to the protocol's handler.
         '''
         try:
-            return self.protocol.authenticate(connection)
+            return await self.protocol.authenticate(connection)
         except:
             return True
     
@@ -351,10 +351,40 @@ class TransportServer(BlockingContextManager):
         or passes the message to the protocol's handler.
         '''
         try:
-            self.protocol.handleMessage(message)
+            await self.protocol.handleMessage(message)
         except:
             self.logger.debug(f'{self.name} received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
             
+    async def handleConnectionFailure(self, connection: Connection) -> None:
+        '''
+        This method is called when a connection failed, for instance when the socket is dead.
+        Should be overwritten by a subclass or implemented by protocol.
+        '''
+        try:
+            await self.protocol.handleConnectionFailure(connection)
+        except:
+            self.logger.debug(f'{self.name} detected a failing client connection')
+    
+    async def handleClientDisconnect(self, connection: Connection) -> None:
+        '''
+        This method is called when a client disconnects from this transport server.
+        Should be overwritten by a subclass or implemented by protocol.
+        '''
+        try:
+            await self.protocol.handleClientDisconnect(connection)
+        except:
+            self.logger.debug(f'A {self.name} client disconnected')
+        
+    async def handleLimitExceedance(self, connection: Connection, sender: Type[Transport]) -> None:
+        '''
+        This method is called when an incoming or outgoing message is too large exceeding the set limit.
+        Should be overwritten by a subclass or implemented by protocol.
+        '''
+        try:
+            await self.protocol.handleLimitExceedance(connection)
+        except:
+            self.logger.debug(f'A {sender.__class__.__name__}\'s message exceeded the set limit "{self.limit}"')
+    
     async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
         '''
         Send a message to either one or more connections.
@@ -377,6 +407,7 @@ class TransportServer(BlockingContextManager):
             if len(message) == 0:
                 return False
             if self.limit and len(message) > self.limit:
+                self.logger.error(f'Outgoing message exceeds limit "{self.limit}" ({textwrap.shorten(message, 50, placeholder="...")}).')
                 raise freedmMessageLimitOverrun()
             
             # Dispatch message to affected connections as long as we're not shutting down
@@ -407,37 +438,3 @@ class TransportServer(BlockingContextManager):
                 return False
         except:
             return False
-        
-    async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
-        '''
-        The actual coroutine dispatching the message to the connection's socket writer.
-        It might close the connection depending on its mode.
-        '''
-        try:
-            if not connection.writer.transport.is_closing():
-                # Dispatch message
-                connection.writer.write(message)
-                await connection.writer.drain()
-                
-                # Close an ephemeral connection, immediately after sending the message
-                if connection.state['mode'] == ConnectionType.EPHEMERAL:
-                    await self.closeConnection(connection)
-                    
-                # Return result
-                return True
-            else:
-                return False
-        except:
-            return False
-    
-    async def close(self) -> None:
-        '''
-        Stop this server
-        '''
-        await self.__aexit__()
-        
-    def setProtocol(self, protocol: Protocol) -> None:
-        '''
-        Sets a new messaging protocol for this transport
-        '''
-        self.protocol = protocol

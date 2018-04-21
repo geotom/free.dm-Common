@@ -12,9 +12,9 @@ try:
     from typing import TypeVar, Optional, Type, Union
     
     # free.dm Imports
-    from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
+    from freedm.transport.base import Transport
     from freedm.transport.message import Message
     from freedm.transport.protocol import Protocol
     from freedm.transport.connection import Connection, ConnectionType
@@ -27,7 +27,7 @@ except ImportError as e:
 TC = TypeVar('TC', bound='TransportClient')
 
 
-class TransportClient(BlockingContextManager):
+class TransportClient(Transport):
     '''
     A generic client implementation to connect to transport servers. It can be used 
     as a contextmanager or as asyncio awaitable. It supports basic message 
@@ -45,9 +45,6 @@ class TransportClient(BlockingContextManager):
     
     # Handler coroutine
     _handler: asyncio.coroutine=None
-    
-    # An identifier name for this client (Used for logging purposes). By default set to the class-name
-    name = None
     
     def __init__(
             self,
@@ -265,15 +262,18 @@ class TransportClient(BlockingContextManager):
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
                         chunks += 1
+                    # Read line by line (Respecting set limit)
                     elif self.lines:
                         try:
                             raw = await connection.reader.readuntil(separator=b'\n')
                         except asyncio.IncompleteReadError as e:
-                            break
+                            self.logger.error(f'Client message exceeds limit "{self.limit}".')
+                            raw = ''
                         except asyncio.CancelledError as e:
                             raise e
                         except Exception as e:
                             raw = ''
+                    # Default read (Respecting set limit)
                     else:
                         raw = await connection.reader.read(self.limit or -1)
                     
@@ -302,16 +302,6 @@ class TransportClient(BlockingContextManager):
         # Close this connection again
         await self.close()
     
-    async def handleMessage(self, message: Message) -> None:
-        '''
-        This method either handles the message itself when overwritten by a subclass
-        or passes the message to the protocol's handler.
-        '''
-        try:
-            self.protocol.handleMessage(message)
-        except:
-            self.logger.debug(f'{self.name} client received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
-
     async def sendMessage(self, message: Union[str, int, float], blocking: bool=False) -> bool:
         '''
         Send a message to either one or more connections
@@ -330,6 +320,7 @@ class TransportClient(BlockingContextManager):
             if len(message) == 0:
                 return False
             if self.limit and len(message) > self.limit:
+                self.logger.error(f'Outgoing message exceeds limit "{self.limit}" ({textwrap.shorten(message, 50, placeholder="...")}).')
                 raise freedmMessageLimitOverrun()
             
             # Dispatch message as long as not we're being disconnected (this task getting cancelled)
@@ -349,37 +340,3 @@ class TransportClient(BlockingContextManager):
                 return False
         except:
             return False
-
-    async def _dispatchMessage(self, message: bytes, connection: Connection) -> bool:
-        '''
-        The actual coroutine dispatching the message to the connection's socket writer.
-        It might close the connection depending on its mode.
-        '''
-        try:
-            if not connection.writer.transport.is_closing():
-                # Dispatch message
-                connection.writer.write(message)
-                await connection.writer.drain()
-                
-                # Close an ephemeral connection, immediately after sending the message
-                if connection.state['mode'] == ConnectionType.EPHEMERAL:
-                    await self.closeConnection(connection)
-                
-                # Return result
-                return True
-            else:
-                return False  
-        except:
-            return False
-    
-    async def close(self) -> None:
-        '''
-        Stop this client connection
-        '''
-        await self.__aexit__()
-        
-    def setProtocol(self, protocol: Protocol) -> None:
-        '''
-        Sets a new messaging protocol for this transport
-        '''
-        self.protocol = protocol

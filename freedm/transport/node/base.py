@@ -13,10 +13,10 @@ try:
     from typing import TypeVar, Any, Optional, Type
     
     # free.dm Imports
-    from freedm.utils.async import BlockingContextManager
     from freedm.utils import logging
     from freedm.utils.async import getLoop
     from freedm.utils.types import TypeChecker as checker
+    from freedm.transport.base import Transport
     from freedm.transport.message import Message
     from freedm.transport.protocol import Protocol
     from freedm.transport.connection import Connection, ConnectionType, ConnectionPool
@@ -29,7 +29,7 @@ except ImportError as e:
 TN = TypeVar('TN', bound='TransportNode')
 
 
-class TransportNode(BlockingContextManager):
+class TransportNode(Transport):
     '''
     A generic transport node implementation a socket based transport between different similar nodes.
     It can be used as a contextmanager or as asyncio awaitable.

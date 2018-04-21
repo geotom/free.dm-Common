@@ -25,6 +25,11 @@ INFO = logging.INFO
 DEBUG = logging.DEBUG
 NOTSET = logging.NOTSET
 
+# Colors
+logging.addLevelName(logging.WARNING, f'\033[1;33m{logging.getLevelName(logging.WARNING)}\033[1;0m ')
+logging.addLevelName(logging.ERROR, f'\033[1;31m{logging.getLevelName(logging.ERROR)}\033[1;0m   ')
+logging.addLevelName(logging.CRITICAL, f'\033[1;41m{logging.getLevelName(logging.CRITICAL)}\033[1;0m')
+logging.addLevelName(logging.INFO, f'\033[1;32m{logging.getLevelName(logging.INFO)}\033[1;0m    ')
 
 # Formats
 FORMAT_DEFAULT  = '%(asctime)s %(levelname)-8s %(message)s'

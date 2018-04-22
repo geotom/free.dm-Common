@@ -64,7 +64,7 @@ class ConnectionPool(set):
         '''
         Return active connections from the specified address
         '''
-        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.client_address == address and c._coro.cr_frame]
+        return [c._coro.cr_frame.f_locals['connection'] for c in self if c.peer_address == address and c._coro.cr_frame]
     
     def getConnectionsByUser(self, uid: int) -> List[C]:
         '''
@@ -102,8 +102,8 @@ Connection = namedtuple('Connection',
     pid
     uid
     gid
-    client_address
-    server_address
+    peer_address
+    host_address
     reader
     writer
     read_handlers

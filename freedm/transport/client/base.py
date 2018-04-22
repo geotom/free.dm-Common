@@ -74,7 +74,7 @@ class TransportClient(Transport):
         '''
         A template function that should be implemented by any subclass
         '''
-        # Call parent (Required to profit from SaveContextManager)
+        # Call parent (Required to profit from BlockingContextManager)
         await super().__aenter__()
         
         # Call pre-connection preparation
@@ -94,6 +94,7 @@ class TransportClient(Transport):
         '''
         Cancel the connection handler and close the connection
         '''
+        
         if not self.connected(): return
         
         # Set internals to None again
@@ -122,67 +123,12 @@ class TransportClient(Transport):
         # Call parent (Required to profit from SaveContextManager)
         await super().__aexit__(*args)
 
-    async def __await__(self) -> TC:
-        '''
-        Makes this class awaitable
-        '''
-        return await self.__aenter__()
-    
     def connected(self) -> bool:
         '''
         Checks if the connection is still alive
         '''
         return (self._connection and not self._connection.state['closed'])
     
-    def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
-        '''
-        Assemble a connection object based on the info we get from the reader/writer
-        '''
-        return Connection(
-            socket=writer.get_extra_info('socket'),
-            pid=None,
-            uid=None,
-            gid=None,
-            client_address=None,
-            server_address=None,
-            reader=reader,
-            writer=writer,
-            read_handlers=set(),
-            write_handlers=set(),
-            state={
-                'mode': self.mode or ConnectionType.PERSISTENT,
-                'created': time.time(),
-                'updated': time.time(),
-                'closed': None
-                }
-            )
-        
-    async def closeConnection(self, connection: Optional[Connection]=None, reason: Optional[str]=None) -> None:
-        '''
-        End and close an existing connection:
-        Acknowledge or inform client about EOF, then close
-        '''
-        if not connection:
-            connection = self._connection
-        if connection and not connection.writer.transport.is_closing():
-            # Tell server the reason
-            if reason:
-                await self.sendMessage(reason, connection)
-            try:
-                if connection.reader.at_eof():
-                    self.logger.debug('Transport closed by server')
-                    connection.reader.feed_eof()
-                else:
-                    self.logger.debug('Transport closed by client')
-                    if connection.writer.can_write_eof(): connection.writer.write_eof()
-                await asyncio.sleep(.1)
-                connection.writer.close()
-            except:
-                pass
-            finally:
-                connection.state['closed'] = time.time()
-                self.logger.debug('Transport writer closed')
-                
     def _onConnectionEstablished(self, connection: Connection) -> None:
         '''
         This function stores the connection and initializes a handler for it

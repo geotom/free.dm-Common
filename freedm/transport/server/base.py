@@ -94,7 +94,7 @@ class TransportServer(Transport):
         '''
         A template function that should be implemented by any subclass
         '''
-        # Call parent (Required to profit from SaveContextManager)
+        # Call parent (Required to profit from BlockingContextManager)
         await super().__aenter__()
         
         # Initialize and create a server a server
@@ -161,35 +161,6 @@ class TransportServer(Transport):
         # Call parent (Required to profit from SaveContextManager)
         await super().__aexit__()
     
-    async def __await__(self) -> TS:
-        '''
-        Makes this class awaitable
-        '''
-        return await self.__aenter__()
-    
-    def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
-        '''
-        Assemble a connection object based on the info we get from the reader/writer
-        '''
-        return Connection(
-            socket=writer.get_extra_info('socket'),
-            pid=None,
-            uid=None,
-            gid=None,
-            client_address=None,
-            server_address=None,
-            reader=reader,
-            writer=writer,
-            read_handlers=set(),
-            write_handlers=set(),
-            state={
-                'mode': self.mode or ConnectionType.PERSISTENT,
-                'created': time.time(),
-                'updated': time.time(),
-                'closed': None
-                }
-            )
-    
     def _onConnectionEstablished(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> asyncio.Task:
         '''
         Responsible for the creation and recycling of connections for any new established session
@@ -207,34 +178,6 @@ class TransportServer(Transport):
             session.add_done_callback(lambda task: self._connection_pool.remove(session))
         return session
     
-    async def rejectConnection(self, connection: Connection, reason: Optional[str]=None) -> None:
-        '''
-        A template function for rejecting a connection attempt
-        '''
-        self.logger.debug(f'-> Rejecting connection ({reason})')
-        await self.closeConnection(connection, reason=reason)
-        
-    async def closeConnection(self, connection: Connection, reason: Optional[str]=None) -> None:
-        '''
-        End and close an existing connection:
-        Acknowledge or inform client about EOF, then close
-        '''
-        connection.state['closed'] = time.time()
-        if not connection.writer.transport.is_closing():
-            # Tell client the reason
-            if reason:
-                await self.sendMessage(reason, connection)
-                
-            if connection.reader.at_eof():
-                self.logger.debug('Transport closed by client')
-                connection.reader.feed_eof()
-            else:
-                self.logger.debug('Transport closed by server')
-                if connection.writer.can_write_eof(): connection.writer.write_eof()
-            await asyncio.sleep(.1)
-            connection.writer.close()
-            self.logger.debug('Transport writer closed')
-            
     async def _init_server(self) -> Any:
         '''
         Template function for initializing the server.
@@ -335,56 +278,6 @@ class TransportServer(Transport):
         # Close the connection (It will be automatically removed from the pool)
         await self.closeConnection(connection)
             
-    async def authenticateConnection(self, connection: Connection) -> bool:
-        '''
-        This method either authenticates the client itself when overwritten by a subclass
-        or passes the message to the protocol's handler.
-        '''
-        try:
-            return await self.protocol.authenticate(connection)
-        except:
-            return True
-    
-    async def handleMessage(self, message: Message) -> None:
-        '''
-        This method either handles the message itself when overwritten by a subclass
-        or passes the message to the protocol's handler.
-        '''
-        try:
-            await self.protocol.handleMessage(message)
-        except:
-            self.logger.debug(f'{self.name} received: {textwrap.shorten(message.data.decode(), 50, placeholder="...")}')
-            
-    async def handleConnectionFailure(self, connection: Connection) -> None:
-        '''
-        This method is called when a connection failed, for instance when the socket is dead.
-        Should be overwritten by a subclass or implemented by protocol.
-        '''
-        try:
-            await self.protocol.handleConnectionFailure(connection)
-        except:
-            self.logger.debug(f'{self.name} detected a failing client connection')
-    
-    async def handleClientDisconnect(self, connection: Connection) -> None:
-        '''
-        This method is called when a client disconnects from this transport server.
-        Should be overwritten by a subclass or implemented by protocol.
-        '''
-        try:
-            await self.protocol.handleClientDisconnect(connection)
-        except:
-            self.logger.debug(f'A {self.name} client disconnected')
-        
-    async def handleLimitExceedance(self, connection: Connection, sender: Type[Transport]) -> None:
-        '''
-        This method is called when an incoming or outgoing message is too large exceeding the set limit.
-        Should be overwritten by a subclass or implemented by protocol.
-        '''
-        try:
-            await self.protocol.handleLimitExceedance(connection)
-        except:
-            self.logger.debug(f'A {sender.__class__.__name__}\'s message exceeded the set limit "{self.limit}"')
-    
     async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
         '''
         Send a message to either one or more connections.

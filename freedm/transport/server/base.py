@@ -242,7 +242,8 @@ class TransportServer(Transport):
                         try:
                             raw = await connection.reader.readuntil(separator=b'\n')
                         except asyncio.IncompleteReadError as e:
-                            self.logger.error(f'Client message exceeds limit "{self.limit}".')
+                            if not connection.reader.at_eof():
+                                self.logger.error(f'Client message exceeds limit "{self.limit}".')
                             raw = ''
                         except asyncio.CancelledError as e:
                             raise e

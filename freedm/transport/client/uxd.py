@@ -53,7 +53,10 @@ class UXDSocketClient(TransportClient):
             self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
             self._socket.connect(self.path)
-            reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop)
+            if self.limit:
+                reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop, limit=self.limit)
+            else:
+                reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop)
             return self._assembleConnection(reader, writer)
         except Exception as e:
             raise freedmSocketCreation(f'Cannot connect to UXD socket file "{self.path}" ({e})')

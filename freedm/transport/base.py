@@ -12,7 +12,7 @@ try:
     import textwrap
     import time
     import asyncio
-    from typing import TypeVar, Optional, Type
+    from typing import TypeVar, Optional, Union, Iterable
     
     # free.dm Imports
     from freedm.utils import logging
@@ -32,11 +32,15 @@ T = TypeVar('T', bound='Transport')
 class Transport(BlockingContextManager):
     '''
     The base class for all transports (Server, Clients, Nodes, ...).
-    This is an awaitable class.
+    This is an awaitable class. Alternatively it also can be called as 
+    context manager. All other transpot nodes need to subclass from this base class.
     '''
     
     # An identifier name for this transport entity (Used for logging purposes). By default set to the class-name
     name: str=None
+    
+    # The default line separator used for reading lines
+    line_separator: str='\n'
     
     def __init__(
             self,
@@ -106,7 +110,9 @@ class Transport(BlockingContextManager):
         
     def setProtocol(self, protocol: Protocol) -> None:
         '''
-        Sets a new messaging protocol for this transport
+        Sets a new messaging protocol for this transport. A protocol implements a communication logic between two
+        or more transport endpoints. Many of the transport handlers try to pass the handling of events to the set
+        protocol handlers.
         '''
         self.protocol = protocol
         
@@ -134,6 +140,28 @@ class Transport(BlockingContextManager):
                 }
             )
         
+    async def _handleConnection(self, connection: Connection) -> None:
+        '''
+        Template method: Observe transport connection and listen for incoming messages until we receive an EOF.
+        '''
+        try:
+            while not connection.reader.at_eof():
+                raw = await connection.reader.read(self.limit or -1)
+                if raw and not len(raw) == 0:
+                    message = Message(
+                        data=raw,
+                        sender=connection
+                        )
+                    await self.handleMessage(message)
+            self.close()
+        except asyncio.CancelledError:
+            return
+        except ConnectionError as e:
+            self.logger.error(f'Transport failed ({e})')
+            return
+        except Exception as e:
+            self.logger.error(f'Transport error ({e})')           
+            
     async def authenticateConnection(self, connection: Connection) -> bool:
         '''
         Template method: This method either authenticates a new peer itself when overwritten by a subclass
@@ -147,16 +175,18 @@ class Transport(BlockingContextManager):
     async def closeConnection(self, connection: Connection, reason: Optional[str]=None) -> None:
         '''
         End and close an existing connection:
-        Acknowledge or inform the peer about EOF, then close
+        Acknowledge or inform the peer about EOF, then close.
         '''
         if connection and not connection.writer.transport.is_closing():
             # Tell transport the reason
             if reason:
                 await self.sendMessage(reason, connection)
             try:
+                connection.state['closed'] = time.time()
                 if connection.reader.at_eof():
                     self.logger.debug('Transport closed by peer')
                     connection.reader.feed_eof()
+                    await self.handlePeerDisconnect(connection)
                 else:
                     self.logger.debug(f'Transport closed by {self.name}')
                     if connection.writer.can_write_eof(): connection.writer.write_eof()
@@ -165,20 +195,22 @@ class Transport(BlockingContextManager):
             except:
                 pass
             finally:
-                connection.state['closed'] = time.time()
+                # Make sure we set this in any case
+                if not connection.state['closed']:
+                    connection.state['closed'] = time.time()
                 self.logger.debug('Transport writer closed')
         
     async def rejectConnection(self, connection: Connection, reason: Optional[str]=None) -> None:
         '''
-        A method rejecting (closing) a new connection attempt
+        A method rejecting (closing) a new connection attempt. An optional reason can be provided and gets sent to the peer
+        before closing (reject) the new connection again.
         '''
         self.logger.debug(f'Rejecting new connection ({reason})')
         await self.closeConnection(connection, reason=reason)
         
     async def handleMessage(self, message: Message) -> None:
         '''
-        This method either handles the message itself when overwritten by a subclass,
-        or passes the message to the protocol's handler.
+        This method handles inbound messages. The handling is passed to the transport's protocol when set.
         '''
         try:
             await self.protocol.handleMessage(message)
@@ -197,7 +229,7 @@ class Transport(BlockingContextManager):
       
     async def handlePeerDisconnect(self, connection: Connection) -> None:
         '''
-        This method is called when a perr disconnects from this transport host.
+        This method is called when a peer disconnects from this transport host.
         Should be overwritten by a subclass or implemented by protocol.
         '''
         try:
@@ -205,12 +237,18 @@ class Transport(BlockingContextManager):
         except:
             self.logger.debug(f'A {self.name} peer disconnected')
           
-    async def handleLimitExceedance(self, connection: Connection, sender: Type[T])  -> None:
+    async def handleLimitExceedance(
+        self,
+        connection: Union[Connection, Iterable[Connection]],
+        message: Union[str, int, float, bytes],
+        inbound: bool
+        ) -> None:
         '''
-        This method is called when an incoming or outgoing message is too large exceeding the set limit.
+        This method is called when an in- or outbound message is too large and exceeding a set limit.
         Should be overwritten by a subclass or implemented by protocol.
         '''
+        message = message.decode() if isinstance(message, bytes) else str(message)
         try:
-            await self.protocol.handleLimitExceedance(connection)
+            await self.protocol.handleLimitExceedance(connection, message, inbound)
         except:
-            self.logger.debug(f'A {sender.__class__.__name__}\'s message exceeded the set limit "{self.limit}"')
+            self.logger.error(f'{"Inbound" if inbound else "Outbound"} message "{textwrap.shorten(message, 25, placeholder="...")}" size exceeds set limit of {self.limit} bytes.')

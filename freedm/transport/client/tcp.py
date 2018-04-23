@@ -105,6 +105,8 @@ class TCPSocketClient(TransportClient):
                 sock=self._socket,
                 server_hostname=self.address if self.sslctx else None
                 )
+            if self.limit:
+                client_options.update({'limit': self.limit})
             reader, writer = await asyncio.open_connection(**client_options)
             return self._assembleConnection(reader, writer)
         except ssl.CertificateError as e:

@@ -8,7 +8,6 @@ try:
     # Imports
     import asyncio
     import time
-    import textwrap
     import functools
     from typing import Union, Type, Optional, TypeVar, Iterable, Any, List
     
@@ -20,7 +19,6 @@ try:
     from freedm.transport.message import Message
     from freedm.transport.protocol import Protocol
     from freedm.transport.connection import Connection, ConnectionType, ConnectionPool
-    from freedm.transport.exceptions import freedmMessageLimitOverrun
 except ImportError as e:
     from freedm.utils.exceptions import freedmModuleImport
     raise freedmModuleImport(e)
@@ -46,12 +44,17 @@ class TransportServer(Transport):
     
     Connection establishment:
     Any newly created client connection will be checked against an optional maximum parallel connection limit 
-    and the client might be rejected if the limit has been surpassed. If a client connections gets accepted, 
-    the specific server implementation should further authenticate the client and reject it as well on failure.
+    and the client might be rejected if the limit has been surpassed. If a client connection gets accepted, 
+    the specific server implementation should further authenticate the client and reject it as well in case of failure.
     
     Reading & sending data:
     First of all, all message IO is handled in a non-blocking asynchronous manner. The server knows several
-    strategies when reading and sending messages. The reading by default is ...
+    strategies when reading and sending messages. The reading by default is simply to read from the socket up to an 
+    optional set limit or everything that arrives.
+    This can be changed to:
+    - Simply read all or up to an optional limit
+    - Read line by line (but only up to an optional line size limit)
+    - Read in chunks up to an optional total data limit
     '''
     
     # The context (This server)
@@ -163,7 +166,7 @@ class TransportServer(Transport):
     
     def _onConnectionEstablished(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> asyncio.Task:
         '''
-        Responsible for the creation and recycling of connections for any new established session
+        Responsible for the connection creation and removal (from pool) for any new established session
         and subsequently hands over the further session handling
         '''
         # Build a connection object
@@ -214,6 +217,7 @@ class TransportServer(Transport):
                 return
                         
             # Read data depending on the connection type and handle it
+            raw = None
             chunks = 0
             chunksize = self.chunksize
             while not connection.reader.at_eof():
@@ -229,10 +233,10 @@ class TransportServer(Transport):
                             consumed = chunks * self.chunksize
                             rest = self.limit - consumed
                             if self.limit == chunksize and chunks > 0:
-                                self.logger.error(f'Client connection limit is smaller than chunksize. Closing connection.')
+                                self.logger.error(f'Set message size limit of {self.limit} bytes is smaller than chunksize {chunksize}. Closing connection.')
                                 break
                             if rest <= 0:
-                                self.logger.debug(f'Client connection limit "{self.limit}" reached. Closing connection.')
+                                self.logger.debug(f'Total message size limit of {self.limit} bytes reached. Closing connection.')
                                 break
                             chunksize = chunksize if rest > chunksize else rest
                         raw = await connection.reader.read(chunksize)
@@ -240,26 +244,31 @@ class TransportServer(Transport):
                     # Read line by line (Respecting set limit)
                     elif self.lines:
                         try:
-                            raw = await connection.reader.readuntil(separator=b'\n')
+                            raw = await connection.reader.readuntil(separator=self.line_separator.encode())
+                        except asyncio.LimitOverrunError as e:
+                            raw = await connection.reader.read(e.consumed + len(self.line_separator.encode()))
+                            await self.handleLimitExceedance(connection, raw, True)
+                            continue
                         except asyncio.IncompleteReadError as e:
-                            if not connection.reader.at_eof():
-                                self.logger.error(f'Client message exceeds limit "{self.limit}".')
-                            raw = ''
+                            if len(e.partial) > 0:
+                                raw = e.partial
+                            else:
+                                continue
                         except asyncio.CancelledError as e:
                             raise e
                         except Exception as e:
-                            raw = ''
+                            continue
                     # Default read (Respecting set limit)
                     else:
                         raw = await connection.reader.read(self.limit or -1)
                         
                     # Handle the received message or message fragment
-                    if not len(raw) == 0:
+                    if raw and not len(raw) == 0:
                         message = Message(
                             data=raw,
                             sender=connection
                             )
-                        # Never launch another message handler while we're being shutdown (this task getting cancelled)
+                        # Never launch another message handler while we're being shutdown (this task getting already cancelled)
                         if not self._shutdown and not connection.state['closed']:
                             reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
                             reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if connection.read_handlers and task in connection.read_handlers else None)
@@ -271,7 +280,7 @@ class TransportServer(Transport):
         except asyncio.CancelledError:
             return # We return as the connection closing is handled by self.close()
         except ConnectionError as e:
-            self.logger.error(f'Transport failed ({e})')
+            await self.handleConnectionFailure(connection)
             return
         except Exception as e:
             self.logger.error(f'Transport error ({e})')
@@ -295,14 +304,14 @@ class TransportServer(Transport):
     
             # Encode and check message
             message = str(message)
-            if self.lines and not message.endswith('\n'):
-                message += '\n'
+            if self.lines and not message.endswith(self.line_separator):
+                message += self.line_separator
             message = message.encode()
             if len(message) == 0:
                 return False
             if self.limit and len(message) > self.limit:
-                self.logger.error(f'Outgoing message exceeds limit "{self.limit}" ({textwrap.shorten(message, 50, placeholder="...")}).')
-                raise freedmMessageLimitOverrun()
+                await self.handleLimitExceedance(connection, message, False)
+                return False
             
             # Dispatch message to affected connections as long as we're not shutting down
             if len(connections) > 0 and not self._shutdown:

@@ -100,6 +100,7 @@ Connection = namedtuple('Connection',
     '''
     socket
     sslctx
+    sslobj
     pid
     uid
     gid

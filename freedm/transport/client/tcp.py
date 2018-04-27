@@ -137,6 +137,7 @@ class TCPSocketClient(TransportClient):
         return Connection(
             socket=sock,
             sslctx=writer.get_extra_info('sslcontext') if self.sslctx else None,
+            sslobj=writer.get_extra_info('ssl_object') if self.sslctx else None,
             pid=os.getpid(),
             uid=os.getuid(),
             gid=os.getgid(),

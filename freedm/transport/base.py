@@ -124,6 +124,7 @@ class Transport(BlockingContextManager):
         return Connection(
             socket=writer.get_extra_info('socket'),
             sslctx=None,
+            sslobj=None,
             pid=None,
             uid=None,
             gid=None,

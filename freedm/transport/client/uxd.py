@@ -9,6 +9,7 @@ try:
     import asyncio
     import socket
     import time
+    import ssl
     from pathlib import Path
     from typing import Optional, Type, Union
     
@@ -25,6 +26,11 @@ except ImportError as e:
 class UXDSocketClient(TransportClient):
     '''
     A client connecting to transport servers via an Unix Domain Socket.
+    
+    Security:
+    To secure the communication between the client and server, pass a pre-setup SSL
+    context object as parameter. Be aware that you need to set an address for the server
+    if you verify the host certificate via " SSLContext.check_hostname".
     '''
     
     # The UXD socket
@@ -33,6 +39,8 @@ class UXDSocketClient(TransportClient):
     def __init__(
             self,
             path: Union[str, Path]=None,
+            address: str=None,
+            sslctx: ssl.SSLContext=None,
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             timeout: int=None,
             limit: Optional[int]=None,
@@ -44,22 +52,40 @@ class UXDSocketClient(TransportClient):
         
         super().__init__(loop, timeout, limit, lines, chunksize, mode, protocol)
         self.path = path
+        self.address = address
+        self.sslctx = sslctx
         
     async def _init_connect(self):
         if not self.path:
             raise freedmSocketCreation('Cannot create UXD socket (No socket file provided)')
         try:
-            # Create UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
+            # Create & connect to UXD socket (Based on https://www.pythonsheets.com/notes/python-socket.html)
             self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
             self._socket.connect(self.path)
+            # Update SSL context
+            if self.sslctx and self.sslctx.check_hostname:
+                if not self.address or self.address == '':
+                    raise Exception(f'SSL: No peer address provided while checking for hostname')
+                def handshake_callback(ssl_socket, server_name, ssl_context) -> None:
+                    self.logger.debug(f'{self.name} trying to verify peer by name "{server_name}" ({"Optional" if not self.sslctx.verify_mode == ssl.CERT_REQUIRED else "Required"})')
+                    return None
+                self.sslctx.set_servername_callback(handshake_callback)
+            # Start client connection
+            client_options=dict(
+                loop=self.loop,
+                ssl=self.sslctx,
+                sock=self._socket,
+                server_hostname=(self.address or '') if self.sslctx else None
+                )
             if self.limit:
-                reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop, limit=self.limit)
-            else:
-                reader, writer = await asyncio.open_unix_connection(sock=self._socket, loop=self.loop)
+                client_options.update({'limit': self.limit})
+            reader, writer = await asyncio.open_unix_connection(**client_options)
             return self._assembleConnection(reader, writer)
+        except ssl.CertificateError as e:
+            raise freedmSocketCreation(f'Cannot connect to UXD socket at "{self.path}" (SSL Error: {e})')
         except Exception as e:
-            raise freedmSocketCreation(f'Cannot connect to UXD socket file "{self.path}" ({e})')
+            raise freedmSocketCreation(f'Cannot connect to UXD socket at "{self.path}" ({e})')
         
     async def _post_disconnect(self, connection) -> None:
         if self._socket:
@@ -75,9 +101,11 @@ class UXDSocketClient(TransportClient):
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         return Connection(
             socket=writer.get_extra_info('socket'),
+            sslctx=writer.get_extra_info('sslcontext') if self.sslctx else None,
             pid=os.getpid(),
             uid=os.getuid(),
             gid=os.getgid(),
+            peer_cert=writer.get_extra_info('peercert') if self.sslctx else None,
             peer_address=None,
             host_address=None,
             reader=reader,

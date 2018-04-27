@@ -32,10 +32,12 @@ class TCPSocketServer(TransportServer):
     - DUAL: Binding to an IPv4 and IPv6 address
     - AUTO: Automatically using the address-families available with a preference for IPv6
     
+    Socket configuration:
     Alternatively it is possible to provide a pre-created socket or list of sockets. In this case, 
     the address-family is ignored. The server can bind to more than one address. Provide a 
     comma-separated list of interface addresses to bind to.
     
+    Security:
     To secure the communication between the server and its clients, pass a pre-setup SSL
     context object as parameter.
     '''
@@ -166,7 +168,6 @@ class TCPSocketServer(TransportServer):
                         reuse_address=True,
                         loop=self.loop,
                         ssl=self.sslctx,
-                        backlog=100,
                         sock=sock
                         )
                     if self.limit:
@@ -198,9 +199,11 @@ class TCPSocketServer(TransportServer):
         sock = writer.get_extra_info('socket')
         return Connection(
             socket=sock,
+            sslctx=writer.get_extra_info('sslcontext') if self.sslctx else None,
             pid=os.getpid(),
             uid=os.getuid(),
             gid=os.getgid(),
+            peer_cert=writer.get_extra_info('peercert') if self.sslctx else None,
             peer_address=sock.getpeername(),
             host_address=sock.getsockname(),
             reader=reader,

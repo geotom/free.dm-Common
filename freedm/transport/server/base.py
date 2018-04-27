@@ -47,6 +47,11 @@ class TransportServer(Transport):
     and the client might be rejected if the limit has been surpassed. If a client connection gets accepted, 
     the specific server implementation should further authenticate the client and reject it as well in case of failure.
     
+    Access:
+    The server can accept and reject new connections from clients in the "authenticateConnection" method. A connection
+    object is configured with relevant parameters for the socket. All custom authentication logic should be implemented
+    here.
+    
     Reading & sending data:
     First of all, all message IO is handled in a non-blocking asynchronous manner. The server knows several
     strategies when reading and sending messages. The reading by default is simply to read from the socket up to an 

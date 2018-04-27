@@ -11,6 +11,7 @@ try:
     import socket
     import struct
     import time
+    import ssl
     from pathlib import Path
     from typing import Union, Type, Optional, Any
     
@@ -28,6 +29,16 @@ class UXDSocketServer(TransportServer):
     '''
     A server using Unix Domain sockets implemented as async contextmanager.
     This server can restrict clients access by their group and user memberships.
+    
+    Security:
+    To secure the communication between the server and its clients, pass a pre-setup SSL
+    context object as parameter.
+    
+    Access:
+    The server can also restrict connections to clients run by the same user or run by users 
+    from the same group (as the server). Set the respective optional boolean parameters "group_only"
+    or "user_only". Any further user context restriction can be implemented in the "authenticateConnection"
+    method. The connection object should be configured with user and group information.
     '''
     
     def __init__(
@@ -35,6 +46,7 @@ class UXDSocketServer(TransportServer):
             path: Union[str, Path]=None,
             group_only: bool=False,
             user_only: bool=False,
+            sslctx: ssl.SSLContext=None,
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             limit: Optional[int]=None,
             chunksize: Optional[int]=None,
@@ -48,6 +60,7 @@ class UXDSocketServer(TransportServer):
         self.path = path
         self.group_only = group_only
         self.user_only = user_only
+        self.sslctx = sslctx
 
     async def _init_server(self) -> Any:
         if not self.path:
@@ -75,10 +88,18 @@ class UXDSocketServer(TransportServer):
             raise freedmSocketCreation(f'Cannot create UXD socket file "{self.path}" ({e})')
         
         # Create UDP socket server
+        server_options=dict(
+            loop=self.loop,
+            ssl=self.sslctx,
+            sock=sock
+            )
         if self.limit:
-            server = await asyncio.start_unix_server(self._onConnectionEstablished, loop=self.loop, sock=sock, limit=self.limit)
-        else:
-            server = await asyncio.start_unix_server(self._onConnectionEstablished, loop=self.loop, sock=sock)
+            server_options.update({'limit': self.limit})
+        server = await asyncio.start_unix_server(
+            self._onConnectionEstablished,
+            **server_options
+        )
+        self.logger.debug(f'{self.name} bound to{" ssl-secured " if self.sslctx else " "}UXD socket at "{self.path}"')
         
         # Return server
         return server
@@ -89,7 +110,7 @@ class UXDSocketServer(TransportServer):
             os.remove(self.path)
         except Exception as e:
             raise freedmSocketShutdown(e)
-        self.logger.debug(f'{self.name} closed (UXD socket "{self.path}")')
+        self.logger.debug(f'{self.name} closed UXD socket at "{self.path}"')
         
     def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
         sock = writer.get_extra_info('socket')
@@ -97,9 +118,11 @@ class UXDSocketServer(TransportServer):
         pid, uid, gid = struct.unpack('3i', credentials)
         return Connection(
             socket=sock,
+            sslctx=writer.get_extra_info('sslcontext') if self.sslctx else None,
             pid=pid,
             uid=uid,
             gid=gid,
+            peer_cert=writer.get_extra_info('peercert') if self.sslctx else None,
             peer_address=None,
             host_address=None,
             reader=reader,

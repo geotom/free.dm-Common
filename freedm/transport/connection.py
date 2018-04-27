@@ -99,9 +99,11 @@ class ConnectionType(Enum):
 Connection = namedtuple('Connection', 
     '''
     socket
+    sslctx
     pid
     uid
     gid
+    peer_cert
     peer_address
     host_address
     reader

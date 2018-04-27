@@ -35,7 +35,14 @@ class TransportClient(Transport):
     - Limiting amount of data sent or received
     - Read data at once or in chunks
     
-    
+    Reading & sending data:
+    First of all, all message IO is handled in a non-blocking asynchronous manner. The client knows several
+    strategies when reading and sending messages. The reading by default is simply to read from the socket up to an 
+    optional set limit or everything that arrives.
+    This can be changed to:
+    - Simply read all or up to an optional limit
+    - Read line by line (but only up to an optional line size limit)
+    - Read in chunks up to an optional total data limit
     '''
     
     # The context (This connection)
@@ -136,6 +143,7 @@ class TransportClient(Transport):
         
         # Start the connection handler
         try:
+            self.logger.debug(f'{self.name} successfully established connection')
             if not self.timeout:
                 self._handler = asyncio.ensure_future(
                     self._handleConnection(self._connection),

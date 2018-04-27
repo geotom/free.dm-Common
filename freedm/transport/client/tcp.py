@@ -30,6 +30,7 @@ class TCPSocketClient(TransportClient):
     - IPV6: IPv6 only
     - AUTO: Automatically using the address-families available with a preference for IPv6
     
+    Security:
     To secure the communication between the client and server, pass a pre-setup SSL
     context object as parameter.
     '''
@@ -39,13 +40,11 @@ class TCPSocketClient(TransportClient):
     
     def __init__(
             self,
-            
             address: Union[str, list]=None,
             port: int=None,
             sslctx: ssl.SSLContext=None,
             family: Optional[AddressType]=AddressType.AUTO,
             socket: socket.socket=None,
-            
             loop: Optional[Type[asyncio.AbstractEventLoop]]=None,
             timeout: int=None,
             limit: Optional[int]=None,
@@ -98,7 +97,15 @@ class TCPSocketClient(TransportClient):
         
         # Connect the socket
         try:
+            # Connect to socket
             self._socket.connect(a_address)
+            # Update SSL context
+            if self.sslctx and self.sslctx.check_hostname:
+                def handshake_callback(ssl_socket, server_name, ssl_context) -> None:
+                    self.logger.debug(f'{self.name} trying to verify peer by name "{server_name}" ({"Optional" if not self.sslctx.verify_mode == ssl.CERT_REQUIRED else "Required"})')
+                    return None
+                self.sslctx.set_servername_callback(handshake_callback)
+            # Start client connection
             client_options=dict(
                 loop=self.loop,
                 ssl=self.sslctx,
@@ -125,13 +132,15 @@ class TCPSocketClient(TransportClient):
             self.logger.debug(f'Transport closed (TCP socket with {"IPv4" if sock.family == socket.AF_INET else "IPv6"}-address "{self.address}:{self.port}")')
             return
                            
-    def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Connection:
+    def _assembleConnection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, ) -> Connection:
         sock = writer.get_extra_info('socket')
         return Connection(
             socket=sock,
+            sslctx=writer.get_extra_info('sslcontext') if self.sslctx else None,
             pid=os.getpid(),
             uid=os.getuid(),
             gid=os.getgid(),
+            peer_cert=writer.get_extra_info('peercert') if self.sslctx else None,
             peer_address=sock.getpeername(),
             host_address=sock.getsockname(),
             reader=reader,

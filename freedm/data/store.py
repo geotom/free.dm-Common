@@ -566,7 +566,7 @@ class DataStore(object):
                 with ThreadPoolExecutor(max_workers=len(domains)) as executor:
                     for domain in domains:
                         if len(workers) <= self._sync_max_threads-1:
-                            workers.append(asyncio.ensure_future(syncWorker(queue, loop, executor), loop=loop))
+                            workers.append(asyncio.create_task(syncWorker(queue, loop, executor)))
                     
                     # Run all workers asynchronously
                     if workers:

@@ -165,7 +165,7 @@ class AsyncIOServer:
         # Register
         if self.auto_register:
             self._bg_register()
-            asyncio.ensure_future(registerPeriodically(self._bg_register, self.registrar.REREGISTER_INTERVAL))
+            asyncio.create_task(registerPeriodically(self._bg_register, self.registrar.REREGISTER_INTERVAL))
 
         # Run loop forever
         try:

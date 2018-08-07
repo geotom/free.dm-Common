@@ -195,6 +195,7 @@ class Transport(BlockingContextManager):
                     if connection.writer.can_write_eof(): connection.writer.write_eof()
                 await asyncio.sleep(.1)
                 connection.writer.close()
+                await connection.writer.wait_closed()
             except:
                 pass
             finally:
@@ -238,7 +239,7 @@ class Transport(BlockingContextManager):
         try:
             await self.protocol.handlePeerDisconnect(connection)
         except:
-            self.logger.debug(f'A {self.name} peer disconnected')
+            self.logger.debug(f'{self.name} peer disconnected')
           
     async def handleLimitExceedance(
         self,

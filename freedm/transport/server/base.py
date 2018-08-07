@@ -129,21 +129,22 @@ class TransportServer(Transport):
         # Inform active clients of shutdown and cancel their active read/write handlers
         try:
             connections = self._connection_pool.getConnections()
-            asyncio.wait(
-                [await self.closeConnection(c) for c in connections],
-                timeout=None,
-                loop=self.loop
-                )
-            async def cancel_connection_handlers(connection: Connection) -> None:
-                for reader in connection.read_handlers:
-                    if not reader.done(): reader.cancel()
-                for writer in connection.write_handlers:
-                    if not writer.done(): writer.cancel()
-            asyncio.wait(
-                [await cancel_connection_handlers(c) for c in connections],
-                timeout=None,
-                loop=self.loop
-                )
+            if len(connections) > 0:
+                await asyncio.wait(
+                    [self.closeConnection(c) for c in connections],
+                    timeout=None,
+                    loop=self.loop
+                    )
+                async def cancel_connection_handlers(connection: Connection) -> None:
+                    for reader in connection.read_handlers:
+                        if not reader.done(): reader.cancel()
+                    for writer in connection.write_handlers:
+                        if not writer.done(): writer.cancel()
+                await asyncio.wait(
+                    [cancel_connection_handlers(c) for c in connections],
+                    timeout=None,
+                    loop=self.loop
+                    )
         except Exception as e:
             self.logger.error(f'Problem shutting down {self.name} gracefully ({e})')
         
@@ -179,9 +180,9 @@ class TransportServer(Transport):
         
         # Check if max connection is not exceeded?
         if self._connection_pool.isFull():
-            session = asyncio.ensure_future(self.rejectConnection(connection, 'Too many connections'), loop=self.loop)
+            session = asyncio.create_task(self.rejectConnection(connection, 'Too many connections'))
         else:
-            session = asyncio.ensure_future(self._handleConnection(connection), loop=self.loop)
+            session = asyncio.create_task(self._handleConnection(connection))
             self._connection_pool.add(session)
             session.add_done_callback(lambda task: self._connection_pool.remove(session))
         return session
@@ -275,7 +276,7 @@ class TransportServer(Transport):
                             )
                         # Never launch another message handler while we're being shutdown (this task getting already cancelled)
                         if not self._shutdown and not connection.state['closed']:
-                            reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
+                            reader = asyncio.create_task(self.handleMessage(message))
                             reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if connection.read_handlers and task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                 except asyncio.CancelledError:

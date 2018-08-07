@@ -145,12 +145,9 @@ class TransportClient(Transport):
         try:
             self.logger.debug(f'{self.name} successfully established connection')
             if not self.timeout:
-                self._handler = asyncio.ensure_future(
-                    self._handleConnection(self._connection),
-                    loop=self.loop
-                    )
+                self._handler = asyncio.create_task(self._handleConnection(self._connection))
             else:
-                self._handler = asyncio.ensure_future(
+                self._handler = asyncio.create_task(
                     asyncio.wait_for(
                         self._handleConnection(self._connection),
                         self.timeout,
@@ -247,7 +244,7 @@ class TransportClient(Transport):
                             )
                         # Never launch another message handler while we're being disconnected (this task getting already cancelled)
                         if (self._handler and not self._handler.done()) and not connection.state['closed']:
-                            reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
+                            reader = asyncio.create_task(self.handleMessage(message))
                             reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if connection.read_handlers and task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                 except asyncio.CancelledError:
@@ -288,7 +285,7 @@ class TransportClient(Transport):
             # Dispatch message as long as not we're being disconnected (this task getting cancelled)
             if self._connection and not self._handler.done() and not self._connection.state['closed']:
                 # Dispatch and store future with a callback
-                writer = asyncio.ensure_future(self._dispatchMessage(message, self._connection), loop=self.loop)
+                writer = asyncio.create_task(self._dispatchMessage(message, self._connection))
                 writer.add_done_callback(lambda task: self._connection.write_handlers.remove(task) if self._connection and task in self._connection.write_handlers else None)
                 self._connection.write_handlers.add(writer)
                 

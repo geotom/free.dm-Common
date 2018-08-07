@@ -16,7 +16,7 @@ try:
     
     # free.dm Imports
     from freedm.utils import logging
-    from freedm.utils.async import BlockingContextManager
+    from freedm.utils.aio import BlockingContextManager
     from freedm.transport.protocol import Protocol
     from freedm.transport.message import Message
     from freedm.transport.connection import Connection, ConnectionType

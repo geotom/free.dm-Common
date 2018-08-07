@@ -13,7 +13,7 @@ try:
     
     # free.dm Imports
     from freedm.utils import logging
-    from freedm.utils.async import getLoop
+    from freedm.utils.aio import getLoop
     from freedm.utils.types import TypeChecker as checker
     from freedm.transport.base import Transport
     from freedm.transport.message import Message
@@ -333,6 +333,7 @@ class TransportServer(Transport):
                     except:
                         pass
                 for c in connections:
+                    # We use functools to properly bind the callback to the connection
                     writer.add_done_callback(functools.partial(cancel_writer, c))
                     c.write_handlers.add(writer)
                 

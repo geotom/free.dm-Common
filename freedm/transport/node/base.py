@@ -14,7 +14,7 @@ try:
     
     # free.dm Imports
     from freedm.utils import logging
-    from freedm.utils.async import getLoop
+    from freedm.utils.aio import getLoop
     from freedm.utils.types import TypeChecker as checker
     from freedm.transport.base import Transport
     from freedm.transport.message import Message
@@ -40,7 +40,7 @@ class TransportNode(Transport):
     - Reading data at once or in chunks
     '''
     
-    # The context (This server)
+    # The context (This node)
     _node: Any=None
     
     # A register for active node connections
@@ -49,7 +49,7 @@ class TransportNode(Transport):
     # A state flag
     _shutdown = False
     
-    # An identifier name for this server (Used for logging purposes). By default set to the class-name
+    # An identifier name for this node (Used for logging purposes). By default set to the class-name
     name = None
     
     def __init__(

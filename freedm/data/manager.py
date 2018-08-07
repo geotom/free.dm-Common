@@ -14,7 +14,7 @@ from logging import Logger
 from freedm import models
 from freedm.data.store import DataStore
 from freedm.data.object import DataObject
-from freedm.utils.async import runConcurrently
+from freedm.utils.aio import runConcurrently
 from freedm.utils.types import TypeChecker as checker
 
 

@@ -17,7 +17,7 @@ from logging import Logger
 # free.dm Imports
 from freedm import models
 from freedm.data.object import DataObject
-from freedm.utils.async import runConcurrently
+from freedm.utils.aio import runConcurrently
 
 
 class DataStore(object):

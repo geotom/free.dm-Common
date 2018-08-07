@@ -15,7 +15,7 @@ from freedm.data.store import DataStore
 from freedm.data.object import DataObject
 from freedm.utils.filesystem import FilesystemObserver
 from freedm.utils.types import TypeChecker as checker
-from freedm.utils.async import runConcurrently
+from freedm.utils.aio import runConcurrently
 
 
 class IniFileStore(DataStore):

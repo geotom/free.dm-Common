@@ -12,7 +12,7 @@ try:
     
     # free.dm Imports
     from freedm.utils import logging
-    from freedm.utils.async import getLoop
+    from freedm.utils.aio import getLoop
     from freedm.transport.base import Transport
     from freedm.transport.message import Message
     from freedm.transport.protocol import Protocol
@@ -286,7 +286,7 @@ class TransportClient(Transport):
                 return False
             
             # Dispatch message as long as not we're being disconnected (this task getting cancelled)
-            if (self._connection and not self._handler.done()) and not self._connection.state['closed']:
+            if self._connection and not self._handler.done() and not self._connection.state['closed']:
                 # Dispatch and store future with a callback
                 writer = asyncio.ensure_future(self._dispatchMessage(message, self._connection), loop=self.loop)
                 writer.add_done_callback(lambda task: self._connection.write_handlers.remove(task) if self._connection and task in self._connection.write_handlers else None)

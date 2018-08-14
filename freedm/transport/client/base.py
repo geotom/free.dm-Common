@@ -145,14 +145,18 @@ class TransportClient(Transport):
         try:
             self.logger.debug(f'{self.name} successfully established connection')
             if not self.timeout:
-                self._handler = asyncio.create_task(self._handleConnection(self._connection))
+                self._handler = asyncio.ensure_future(
+                    self._handleConnection(self._connection),
+                    loop=self.loop
+                    )
             else:
-                self._handler = asyncio.create_task(
+                self._handler = asyncio.ensure_future(
                     asyncio.wait_for(
                         self._handleConnection(self._connection),
                         self.timeout,
                         loop=self.loop
-                        )
+                        ),
+                    loop=self.loop
                 )
         except Exception as e:
             self.logger.debug('Transport connection handler could not be initialized')
@@ -244,7 +248,7 @@ class TransportClient(Transport):
                             )
                         # Never launch another message handler while we're being disconnected (this task getting already cancelled)
                         if (self._handler and not self._handler.done()) and not connection.state['closed']:
-                            reader = asyncio.create_task(self.handleMessage(message))
+                            reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
                             reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if connection.read_handlers and task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                 except asyncio.CancelledError:
@@ -261,7 +265,7 @@ class TransportClient(Transport):
         # Close this connection again
         await self.close()
     
-    async def sendMessage(self, message: Union[str, int, float], blocking: bool=False) -> bool:
+    async def send_message(self, message: Union[str, int, float], blocking: bool=False) -> bool:
         '''
         Send a message to either one or more connections
         This function by default is a fire & forget method, but when set

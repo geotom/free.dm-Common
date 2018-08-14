@@ -178,11 +178,11 @@ class TransportServer(Transport):
         # Build a connection object
         connection = self._assembleConnection(reader, writer)
         
-        # Check if max connection is not exceeded?
+        # Handle request if max connection is not exceeded
         if self._connection_pool.isFull():
-            session = asyncio.create_task(self.rejectConnection(connection, 'Too many connections'))
+            session = asyncio.ensure_future(self.rejectConnection(connection, 'Too many connections'), loop=self.loop)
         else:
-            session = asyncio.create_task(self._handleConnection(connection))
+            session = asyncio.ensure_future(self._handleConnection(connection), loop=self.loop)
             self._connection_pool.add(session)
             session.add_done_callback(lambda task: self._connection_pool.remove(session))
         return session
@@ -276,7 +276,7 @@ class TransportServer(Transport):
                             )
                         # Never launch another message handler while we're being shutdown (this task getting already cancelled)
                         if not self._shutdown and not connection.state['closed']:
-                            reader = asyncio.create_task(self.handleMessage(message))
+                            reader = asyncio.ensure_future(self.handleMessage(message), loop=self.loop)
                             reader.add_done_callback(lambda task: connection.read_handlers.remove(task) if connection.read_handlers and task in connection.read_handlers else None)
                             connection.read_handlers.add(reader)
                 except asyncio.CancelledError:
@@ -294,7 +294,7 @@ class TransportServer(Transport):
         # Close the connection (It will be automatically removed from the pool)
         await self.closeConnection(connection)
             
-    async def sendMessage(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
+    async def send_message(self, message: Union[str, int, float], connection: Union[Connection, Iterable[Connection]]=None, blocking: bool=False) -> bool:
         '''
         Send a message to either one or more connections.
         This function by default is a fire & forget method, but when set

@@ -183,7 +183,7 @@ class Transport(BlockingContextManager):
         if connection and not connection.writer.transport.is_closing():
             # Tell transport the reason
             if reason:
-                await self.sendMessage(reason, connection)
+                await self.send_message(reason, connection)
             try:
                 connection.state['closed'] = time.time()
                 if connection.reader.at_eof():

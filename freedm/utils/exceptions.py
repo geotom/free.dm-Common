@@ -19,14 +19,16 @@ class ExceptionHandler:
     '''
     # Logger
     logger = None
-    
+
     def __init__(self, handler: Optional[str]=None, logger: Optional[Type[logging.logging.Logger]]=None):
         # Set a logger
         self.__class__.logger = logger or logging.getLogger()
+
         # Get correct exception handler
         try:
-            if not handler: handler = 'default'
-            method = getattr(self.__class__, f'{handler.lower()}Handler')
+            if not handler:
+                handler = 'default'
+            method = getattr(self.__class__, f'{handler.lower()}_handler')
             if not hasattr(method, '__call__'):
                 method = self.defaultHandler
         except AttributeError:
@@ -35,6 +37,7 @@ class ExceptionHandler:
         except Exception as e:
             logger.error(f'Cannot setup exception handler "{handler}" ({e})')
             method = self.defaultHandler
+
         # Finally set this as global exception handler
         finally:
             def exception_handler(error_type, error, error_trace):
@@ -46,28 +49,29 @@ class ExceptionHandler:
                     # Is this a fatal exception?
                     try:
                         fatal = error.fatal
-                    except:
+                    except Exception:
                         fatal = False
-                    if fatal: sys.exit()
+                    if fatal:
+                        sys.exit()
             previous = sys.excepthook.__name__
             sys.excepthook = exception_handler
             if previous == 'exception_handler':
-                ExceptionHandler.logger.debug(f'Changed exception handler to "{method.__name__[:-7].upper()}"')
+                ExceptionHandler.logger.debug(f'Changed exception handler to "{method.__name__[:-8].upper()}"')
             else:
-                ExceptionHandler.logger.debug(f'Setup exception handler "{method.__name__[:-7].upper()}"')
-    
+                ExceptionHandler.logger.debug(f'Setup exception handler "{method.__name__[:-8].upper()}"')
+
     @staticmethod
-    def defaultHandler(error_type, error, error_trace) -> None:
+    def default_handler(error_type, error, error_trace) -> None:
         logger = ExceptionHandler.logger or logging.getLogger()
         logger.error(f'{error_type.__name__}: "{error}"')
-    
+
     @staticmethod
-    def productHandler(error_type, error, error_trace) -> None:
+    def product_handler(error_type, error, error_trace) -> None:
         logger = ExceptionHandler.logger or logging.getLogger()
         logger.error(f'Exception "{error_type.__name__}" occurred!')
-    
-    @staticmethod     
-    def debugHandler(error_type, error, error_trace) -> None:
+
+    @staticmethod
+    def debug_handler(error_type, error, error_trace) -> None:
         logger = ExceptionHandler.logger or logging.getLogger()
         try:
             logger.error(error, exc_info=False)
@@ -75,7 +79,7 @@ class ExceptionHandler:
             logger.error(f'Error when handling exception "{error_type.__name__}" ({e})')
         finally:
             if logger.level == logging.DEBUG:
-                #sys.__excepthook__(error_type, error, error_trace)
+                # sys.__excepthook__(error_type, error, error_trace)
                 traceback.print_exception(None, error, error_trace, chain=True)
 
 
@@ -85,10 +89,10 @@ class freedmBaseException(Exception):
     '''
     # A template string or function for string representations of this exception
     template: Union[str, Callable] = None
-    
+
     # A flag causing the program to halt when fatal is True
     fatal: bool = False
-    
+
     def __init__(self, error) -> None:
         super().__init__(error)
         try:
@@ -106,6 +110,7 @@ class freedmUnsupportedOS(freedmBaseException):
     '''
     Gets thrown when the current OS is not supported
     '''
+
     def template(self, error: Type[Exception]) -> str:
         if error.name:
             return f'Module "{error.name}" not supported on current Operating System "{platform.system()}"'
@@ -118,6 +123,7 @@ class freedmModuleImport(freedmBaseException):
     Gets thrown when a Python module cannot be imported
     '''
     fatal = True
+
     def template(self, error: Type[Exception]) -> str:
         if error.name:
             return(f'Missing module dependency ({error.name}): Please install via "pip install {error.name}"')

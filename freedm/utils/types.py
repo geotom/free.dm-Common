@@ -1,38 +1,32 @@
 '''
 A utility class providing static methods for data type checks.
 The preferred way of type checking is to simply use variables in try
-blocks and catch type non-conformity in except blocks. But for cases where 
+blocks and catch type non-conformity in except blocks. But for cases where
 prior type checking is the better approach, this utility class provides a set of
 type checking methods.
-
 @author: Thomas Wanderer
 '''
 
 # Imports
 from typing import Any
 
+
 class TypeChecker:
-    
+
     @staticmethod
-    def isInteger(obj: Any) -> bool:
+    def is_integer(obj: Any) -> bool:
         '''
-        Checks if a number is an integer or if 
-        a string represents an integer
-        :param object obj: Any object
-        :rtype: bool
+        Checks if a number is an integer or if a string represents an integer
         '''
         if type(obj) == str:
             return obj.isdigit()
         else:
             return isinstance(obj, int)
-    
+
     @staticmethod
-    def isFloat(obj: Any) -> bool:
+    def is_float(obj: Any) -> bool:
         '''
-        Checks if a number is a float
-        or a string represents a float
-        :param object obj: Any object
-        :rtype: bool
+        Checks if a number is a float or a string represents a float
         '''
         if type(obj) == str:
             result = False
@@ -45,136 +39,110 @@ class TypeChecker:
             return result
         else:
             return isinstance(obj, float)
-    
+
     @staticmethod
-    def isBoolean(obj: Any) -> bool:
+    def is_boolean(obj: Any) -> bool:
         '''
         Checks if an object is a boolean
-        :param object obj: Any object
-        :rtype: bool
         '''
         return type(obj) == bool
-    
+
     @staticmethod
-    def isNumerical(cls, obj: Any) -> bool:
+    def is_numerical(cls, obj: Any) -> bool:
         '''
         Checks if a string represents a number (a float or integer)
-        :param object obj: Any object
-        :rtype: bool
         '''
         try:
-            if cls.isFloat(obj):
+            if cls.is_float(obj):
                 return True
-            elif cls.isInteger(obj):
+            elif cls.is_integer(obj):
                 return True
             else:
                 return False
-        except:
+        except Exception:
             return False
-    
+
     @staticmethod
-    def isDigit(obj: Any) -> bool:
+    def is_digit(obj: Any) -> bool:
         '''
         Checks if a string represents only digits (e.g. "12345")
-        :param object obj: Any object
-        :rtype: bool
         '''
         try:
             return str(obj).isdigit()
-        except:
+        except Exception:
             return False
-    
-    @staticmethod  
-    def isString(obj: Any) -> bool:
+
+    @staticmethod
+    def is_string(obj: Any) -> bool:
         '''
         Checks if the object is a string
-        :param object obj: Any object
-        :rtype: bool
         '''
         return isinstance(obj, str)
-    
-    @staticmethod  
-    def isTuple(obj: Any) -> bool:
+
+    @staticmethod
+    def is_tuple(obj: Any) -> bool:
         '''
         Checks if the object is a tuple
-        :param object obj: Any object
-        :rtype: bool
         '''
         return isinstance(obj, tuple)
-    
-    @staticmethod  
-    def isList(obj: Any) -> bool:
+
+    @staticmethod
+    def is_list(obj: Any) -> bool:
         '''
         Checks if the object is a list
-        :param object obj: Any object
-        :rtype: bool
         '''
         return isinstance(obj, list)
-    
-    @staticmethod  
-    def isDict(obj: Any) -> bool:
+
+    @staticmethod
+    def is_dict(obj: Any) -> bool:
         '''
         Checks if the object is a dictionary
-        :param object obj: Any object
-        :rtype: bool
         '''
         return isinstance(obj, dict)
 
-    @staticmethod  
-    def isFunction(obj: Any) -> bool:
+    @staticmethod
+    def is_function(obj: Any) -> bool:
         '''
         Checks if the object is a function
-        :param object obj: Any object
-        :rtype: bool
         '''
         return hasattr(obj, '__call__')
-    
-    @staticmethod  
-    def isAlpha(string: str) -> bool:
+
+    @staticmethod
+    def is_alpha(string: str) -> bool:
         '''
         Checks if a string contains only alphabetical characters
-        :param str string: A string
-        :rtype: bool
         '''
         try:
             return string.isalpha()
-        except:
+        except Exception:
             return False
-    
-    @staticmethod  
-    def getExactType(obj: Any) -> str:
+
+    @staticmethod
+    def get_exact_type(obj: Any) -> str:
         '''
         Returns the object's type together with full module path
-        :param object obj: Any object
-        :returns: The objects's type
-        :rtype: str
-        '''       
+        '''
         try:
             return f'{obj.__class__.__module__}.{obj.__class__.__name__}'
-        except:
+        except Exception:
             try:
                 return obj.__class__.__name__
-            except:
+            except Exception:
                 return None
 
-    @classmethod  
-    def isExactType(cls, obj: Any, obj_type: str) -> bool:
+    @classmethod
+    def is_exact_type(cls, obj: Any, obj_type: str) -> bool:
         '''
         Checks if the object is of a specific type name
-        :param object obj: Any object
-        :param str obj_type: The full name of the type including the module path
-        :rtype: bool
         '''
         try:
-            return cls.getExactType(obj) == obj_type
-        except:
+            return cls.get_exact_type(obj) == obj_type
+        except Exception:
             return False
-        
+
     @staticmethod
-    def isIterable(obj: Any) -> bool:
+    def is_iterable(obj: Any) -> bool:
         '''
         Checks if the object is iterable
-        :param obj: Any object
-        :rtype: bool
         '''
         return hasattr(obj, '__iter__')
